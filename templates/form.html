@@ -1,0 +1,113 @@
+<!-- Zeltlager -->
+
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>Zeltlager 2025 Farm Fieber</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="icon" type="image/jpg" href="{{ url_for('static', filename='Wappen_TSV-Bitzfeld-TSV-Schwabbach.png') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Zeltlager 2025</h1>
+        <h2>Farm Fieber</h2>
+        <div class="info-grid">
+            <div class="label">Wann?</div>
+            <div class="value">Freitag, 18. Juli 2025 ab 16:00 Uhr bis Sonntag, 20. Juli 2025</div>
+            <div class="label">Wo?</div>
+            <div class="value">Sportplatz in Schwabbach</div>
+            <div class="label">Wer?</div>
+            <div class="value">Kinder von 1. – 5. Klasse, die Mitglied im TSV Schwabbach / TSV Bitzfeld sind.</div>
+            <div class="label">Kosten:</div>
+            <div class="value">50,00 € pro Kind</div>
+            <div class="label">Betreuung:</div>
+            <div class="value">durch Trainer und Übungsleiter</div>
+        </div>
+	<p>Wir, der TSV Schwabbach und der TSV Bitzfeld, freuen uns auf 3 tolle Tage mit euch!<br><br>
+Am Sonntag, den 20. Juli sind auch die Eltern ab 14.00 Uhr recht herzlich zu <strong>Kaffee und Kuchen</strong> eingeladen (Geschirr bitte selbst mitbringen).<br>
+Im Anschluss findet, das <strong>Fußballspiel „Klein gegen Groß“</strong> statt. Denkt deshalb an eure <strong>Turnschuhe</strong>.<br><br>
+Da wir samstags einen <strong>Tagesausflug nach Braunsbach (Bauernhof)</strong> planen, benötigen wir hier vorab eine Einverständniserklärung für die Fahrt.<br><br>
+Bitte reicht <strong>Anmeldung, Gesundheitsbogen und Einverständniserklärung</strong> zusammen mit der <strong>Gebühr von 50,00 €</strong> bis spätestens <strong>30. Juni 2024</strong> ein.<br><br>
+Bei Fragen könnt ihr euch gerne an Lena Weihbrecht, Tel.: 0173/8909378 wenden.<br>
+Die <strong>Anmeldung ist verbindlich</strong> und die Bezahlung erfolgt bei der Anmeldung.<br>
+Bei Absage des Zeltlagers (wegen schlechten Wetters) behalten wir <strong>15,00 € pro Kind</strong> für schon entstandene Kosten ein. Wir bitten um Verständnis.</p>
+        <p class="required-info">Felder mit <span class="required">*</span> sind Pflichtfelder.</p>
+
+        <form action="/" method="POST" id="registrationForm" novalidate>
+            {{ form.hidden_tag() }}  <!-- ✅ CSRF-Token bleibt erhalten -->
+
+            <!-- Dynamischer Bereich für Kinder -->
+            <div id="persons-container">
+                <div class="person-form" id="person_1">
+                    <h3>Kind 1</h3>
+
+                    <div class="form-group">
+                        <label>Name des Kindes <span class="required">*</span></label>
+                        <div class="input-group">
+                            <input type="text" name="person_firstname_1" class="form-control" placeholder="Vorname" required>
+                            <input type="text" name="person_lastname_1" class="form-control" placeholder="Nachname" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Geburtsdatum des Kindes <span class="required">*</span></label>
+                        <input type="date" name="birthdate_1" class="form-control" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Vereinsmitgliedschaft <span class="required">*</span></label>
+                        <select name="club_membership_1" class="form-control" required>
+                            <option value="">Verein auswählen</option>
+                            <option value="TSV Bitzfeld 1922 e.V.">TSV Bitzfeld 1922 e.V.</option>
+                            <option value="TSV Schwabbach 1947 e.V.">TSV Schwabbach 1947 e.V.</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Button, um weitere Person hinzuzufügen -->
+            <button type="button" id="add-person-button" class="change-person-button">Weiteres Kind hinzufügen</button>
+
+            <!-- Erziehungsberechtigter-Daten -->
+            <hr class="person-contact-divider">
+            <h3>Kontaktperson mit Erziehungsrecht</h3>
+            <div class="form-group">
+                <label for="contact_firstname">Name der Kontaktperson<span class="required">*</span></label>
+                <div class="input-group">
+                    <input type="text" id="contact_firstname" name="contact_firstname" class="form-control" required placeholder="Vorname">
+                    <input type="text" id="contact_lastname" name="contact_lastname" class="form-control" required placeholder="Nachname">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="contact_birthdate">Geburtsdatum der Kontaktperson <span class="required">*</span></label>
+                <input type="date" id="contact_birthdate" name="contact_birthdate" class="form-control" required>
+            </div>
+
+            <div class="form-group">
+                <label for="phone_number">Notfall-Telefonnummer <span class="required">*</span></label>
+                <input type="tel" id="phone_number" name="phone_number" class="form-control" required placeholder="0123 4567890">
+            </div>
+
+            <div class="form-group">
+                <label for="email">E-Mail Adresse <span class="required">*</span></label>
+                <input type="email" id="email" name="email" class="form-control" required placeholder="beispiel@email.de">
+            </div>
+
+            <!-- Datenschutz -->
+            <p>
+                Mit dem Absenden erkläre ich mich mit der 
+                <a href="{{ url_for('privacy') }}" class="privacy-link" target="_blank">Datenschutzerklärung</a>
+                einverstanden.
+            </p>
+
+            <!-- Abschicken -->
+            <button type="submit">Anmeldung absenden</button>
+        </form>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

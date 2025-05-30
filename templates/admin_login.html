@@ -1,0 +1,74 @@
+<!-- Zeltlager -->
+
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Login</title>
+    <link rel="icon" type="image/jpg" href="{{ url_for('static', filename='Wappen_TSV-Bitzfeld-TSV-Schwabbach.png') }}">
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" nonce="{{ csp_nonce }}">
+    <script nonce="{{ csp_nonce }}" src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script nonce="{{ csp_nonce }}" src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script nonce="{{ csp_nonce }}">
+        window.ADMIN_LOGIN_DATA = {
+            flashMessages: {{ flashMessages | tojson | safe }},
+            csrfToken: "{{ csrf_token }}"
+        };
+    </script>
+</head>
+<body>
+    <div id="root">
+        <!-- Fallback content in case React fails to load -->
+        <div class="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+            <div class="w-full max-w-md bg-white rounded-lg shadow-md p-6">
+                <div class="text-center mb-6">
+                    <h2 class="text-2xl font-bold">Admin Login</h2>
+                    <p class="text-gray-600">Bitte melden Sie sich an, um fortzufahren</p>
+                </div>
+                
+                <form method="POST" class="space-y-4">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    
+                    <div>
+                        <label for="password" class="block text-sm font-medium text-gray-700 mb-1">
+                            Passwort
+                        </label>
+                        <div class="relative">
+                            <input
+                                type="password"
+                                id="password"
+                                name="password"
+                                class="block w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                                required
+                            >
+                        </div>
+                    </div>
+
+                    <button
+                        type="submit"
+                        class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    >
+                        Anmelden
+                    </button>
+                </form>
+
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        <div class="mt-4 space-y-2">
+                            {% for category, message in messages %}
+                                <div class="p-4 rounded-md {% if category == 'success' %}bg-green-50 text-green-800{% else %}bg-red-50 text-red-800{% endif %}">
+                                    {{ message }}
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                {% endwith %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Login React Script -->
+    <script nonce="{{ csp_nonce }}" src="{{ url_for('static', filename='login.js') }}"></script>
+</body>
+</html>

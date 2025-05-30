@@ -1,0 +1,26 @@
+Hallo {contact_firstname} {contact_lastname},
+
+vielen Dank für Ihre Anmeldung zur Stadionausfahrt vom Jugendfußball der SGM Brettachtal!
+
+Oberliga-Topspiel: SG Sonnenhof Grossaspach gegen VfR Aalen 
+Datum: 10.05.2025 
+Uhrzeit: 15:30 Uhr
+Spielort: WIR-MACHEN-DRUCK-ARENA in Aspach
+
+Wir treffen uns um 13:30 Uhr zur gemeinsamen Abfahrt am Parkplatz vor der TSV-Halle am Sportgelände in Bitzfeld.
+Dort werden die Tickets für das Spiel verteilt.
+
+Angemeldete Teilnehmer:
+{persons_details}
+
+Kontaktperson: {contact_firstname} {contact_lastname}
+Telefonnummer: {phone_number}
+E-Mail: {email}
+
+Bei Fragen oder Änderungswünschen erreichen Sie uns unter anmeldung.tsvbitzfeld1922@gmail.com.
+In dringenden Fällen können Sie sich telefonisch oder per WhatsApp unter 0152 55693004 beim Organisator Pascal Weibler melden.
+
+Wir freuen uns auf einen tollen Fußballnachmittag!
+
+Mit sportlichen Grüßen
+Abteilung Jugendfußball des TSV Bitzfeld

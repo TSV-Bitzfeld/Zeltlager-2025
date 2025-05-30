@@ -1,0 +1,25 @@
+<!-- Zeltlager -->
+
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seite nicht gefunden</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="icon" type="image/jpg" href="{{ url_for('static', filename='Wappen_TSV-Bitzfeld-TSV-Schwabbach.png') }}">
+</head>
+<body>
+    <div class="error-container">
+        <h1>🚨 404 - Seite nicht gefunden</h1>
+        <p>Die Seite, die Sie suchen, ist leider nicht verfügbar.</p>
+        <p><strong>Versuchen Sie Folgendes:</strong></p>
+        <ul>
+            <p>Überprüfen Sie die URL auf Schreibfehler.</p>
+            <p>Gehen Sie zurück zur Startseite.</p>
+            <p>Falls das Problem weiterhin besteht, <a href="mailto:info@tsv-bitzfeld.de">kontaktieren Sie uns</a>.</p>
+        </ul>
+        <a href="/" class="error-btn">🔙 Zur Startseite</a>
+    </div>
+</body>
+</html>

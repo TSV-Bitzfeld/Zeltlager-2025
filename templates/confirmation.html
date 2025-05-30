@@ -1,0 +1,33 @@
+<!-- Zeltlager -->
+
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>Bestätigung</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="icon" type="image/jpg" href="{{ url_for('static', filename='Wappen_TSV-Bitzfeld-TSV-Schwabbach.png') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>VIELEN DANK FÜR IHRE ANMELDUNG!</h1>
+        <div class="payment-info">
+            <p>Eine Zusammenfassung ihrer Daten erhalten Sie in wenigen Minuten per Mail. Damit können Sie sicher sein, dass die Anmeldung bei uns eingegangen ist.<br><br>
+Die offizielle Bestätigung der Anmeldung erfolgt <strong>am 30. Juni 2025</strong>, sofern alle erforderlichen Dokumente vollständig hochgeladen und die Bezahlung getätigt wurde.<br><br>
+        </p>
+        </div>
+
+        <!-- Bankdaten direkt angezeigt -->
+        <div class="bank-details-container">
+            <p><strong>Empfänger:</strong> {{ payment_info.recipient }}</p>
+            <p><strong>IBAN:</strong> {{ payment_info.iban }}</p>
+            <p><strong>BIC:</strong> {{ payment_info.bic }}</p>
+            <p><strong>Verwendungszweck:</strong> Zeltlager - {{ data.contact_firstname }} {{ data.contact_lastname }}</p>
+            <p><br><br>Bitte überweisen Sie den Betrag bis zum 30. Juni 2025.</p>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
