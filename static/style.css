@@ -328,7 +328,7 @@ button {
 
 button:hover, .button:hover {
     background-color: #b22222;
-    transform: scale(1.05);
+    transform: scale(1.025);
 }
 
 /* Button Variations */
@@ -408,6 +408,7 @@ button:hover, .button:hover {
     color: #FFFFFF; 
     font-size: 14px;
     font-weight: bold;
+    transition: background 0.3s;
     border: 2px solid #000000;
     border-radius: 0.5rem;
     margin-top: 20px;
@@ -415,12 +416,13 @@ button:hover, .button:hover {
     text-decoration: none;
     display: inline-block;
     text-align: center;
-    width: 50%;
+    width: 100%;
 }
 
 .change-person-button:hover {
     background-color: #000000; 
     color: #FFFFFF; 
+    transform: scale(1.025);
 }
 
 .change-person-button-container {
@@ -627,14 +629,6 @@ table th, table td {
        width: 100%;
    }
 
-    /* Payment buttons for mobile */
-    .paypal-button,
-    .bank-button {
-        width: 100%;
-        margin: 15px 0;
-        padding: 10px;
-        font-size: 1rem;
-    }
     .info-grid {
         gap: 8px 15px;
         padding: 15px;
@@ -740,25 +734,6 @@ table th, table td {
        font-size: 13px;
    }
 
-}
-
-@media (pointer: coarse) {
-    button:hover, .button:hover {
-        background-color: #b22222;
-        transform: scale(1);
-    }
-
-    .paypal-button:hover {
-        background-color: #003087;
-        color: #FFFFFF;
-        transform: scale(1);
-    }
-
-    .bank-button:hover {
-        background-color: #000000;
-        color: #FFFFFF;
-        transform: scale(1);
-    }
 }
 
 @supports (-webkit-touch-callout: none) {

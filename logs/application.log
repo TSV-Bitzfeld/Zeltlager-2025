@@ -24,3 +24,4 @@
 2025-05-30 15:05:56,822 INFO: Application startup [in C:\Users\pwwpp\Websites\anmeldung-zeltlager\app.py:94]
 2025-05-30 15:07:37,661 INFO: Admin login successful [in C:\Users\pwwpp\Websites\anmeldung-zeltlager\app.py:470]
 2025-05-30 15:07:37,835 INFO: Stats: {'total_registrations': 0, 'confirmed_registrations': 0, 'total_children': 0} [in C:\Users\pwwpp\Websites\anmeldung-zeltlager\app.py:534]
+2025-05-30 15:45:08,984 INFO: Application startup [in C:\Users\pwwpp\Websites\anmeldung-zeltlager\app.py:94]
