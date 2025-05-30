@@ -78,6 +78,12 @@ function validateForm() {
                     if (field.value === '' || field.value === field.querySelector('option').value) {
                         errorMessage = 'Bitte eine Option auswählen';
                     }
+                    if (field.name === 'cake_donation' && field.value === '') {
+                        errorMessage = 'Bitte wählen Sie eine Kuchenspende-Option aus';
+                    }
+                    if (field.name === 'help_organisation' && field.value === '') {
+                        errorMessage = 'Bitte wählen Sie eine Auf-/Abbau-Option aus';
+                    }
                     break;
             }
         }
@@ -249,6 +255,19 @@ function collectFormData() {
         return null;
     }
 
+    const cakeDonation = document.querySelector('select[name="cake_donation"]')?.value;
+    const helpOrganisation = document.querySelector('select[name="help_organisation"]')?.value;
+
+    if (!cakeDonation) {
+        addFlashMessage('❌Bitte wählen Sie eine Kuchenspende-Option aus.', 'error');
+        return null;
+    }
+
+    if (!helpOrganisation) {
+        addFlashMessage('❌Bitte wählen Sie eine Auf-/Abbau-Option aus.', 'error');
+        return null;
+    }
+
     return {
         csrf_token: csrfToken,
         persons,
@@ -256,7 +275,9 @@ function collectFormData() {
         contact_lastname: document.getElementById('contact_lastname').value,
         contact_birthdate: document.getElementById('contact_birthdate').value,
         phone_number: document.getElementById('phone_number').value,
-        email: document.getElementById('email').value
+        email: document.getElementById('email').value,
+        cake_donation: cakeDonation,
+        help_organisation: helpOrganisation
     };
 }
 
@@ -277,11 +298,28 @@ function collectPersonsData() {
     return persons;
 }
 
-function validatePersonData(personData) {
-    return personData.person_firstname && 
-           personData.person_lastname && 
-           personData.birthdate && 
-           personData.club_membership;
+def validatePersonData(personData) {
+    if (!personData.person_firstname || !personData.person_lastname || 
+        !personData.birthdate || !personData.club_membership) {
+        return false;
+    }
+    
+    // ✨ Altersvalidierung auch im Frontend
+    const birthDate = new Date(personData.birthdate);
+    const today = new Date();
+    const age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+    }
+    
+    if (age < 6 || age > 11) {
+        addFlashMessage(`❌ Kind ist ${age} Jahre alt. Zeltlager ist für 1.-5. Klasse (6-11 Jahre).`, 'error');
+        return false;
+    }
+    
+    return true;
 }
 
 async function submitForm(formData) {

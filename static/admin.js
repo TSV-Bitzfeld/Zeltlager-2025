@@ -129,6 +129,8 @@ const AdminDashboard = () => {
                                                {registration.contact_birthdate && <p>Geb.: {registration.contact_birthdate}</p>}
                                                <p>Telefonnummer: {registration.phone_number}</p>
                                                <p>E-Mail: {registration.email}</p>
+                                               <p>Kuchenspende: {registration.cake_donation}</p>
+                                               <p>Auf-/Abbau: {registration.help_organisation}</p>
                                            </td>
                                            <td className="px-6 py-4">
                                                <div className="flex flex-col space-y-2">

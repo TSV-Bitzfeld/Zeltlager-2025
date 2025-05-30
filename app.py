@@ -31,6 +31,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from sqlalchemy.orm import validates
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import text
 from wtforms import (
     StringField, DateField, SelectField, 
     EmailField, TelField, PasswordField, 
@@ -70,7 +71,8 @@ migrate = Migrate(app, db)
 limiter = Limiter(
     key_func=get_remote_address,
     app=app,
-    default_limits=["200 per day", "50 per hour"]
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://"
 )
 
 # Configure logging
@@ -152,7 +154,9 @@ class Registration(db.Model):
     contact_birthdate = db.Column(db.String(10), nullable=False)
     phone_number = db.Column(db.String(15), nullable=False)
     email = db.Column(db.String(100), nullable=False, index=True)
-    confirmed = db.Column(db.Boolean, default=False)
+    cake_donation = db.Column(db.String(100), nullable=False, default='')
+    help_organisation = db.Column(db.String(100), nullable=False, default='')
+    confirmed = db.Column(db.Boolean, default=False, index=True)
     created_at = db.Column(
         db.DateTime, 
         default=lambda: datetime.now(pytz.timezone("Europe/Berlin")),
@@ -173,8 +177,11 @@ class Registration(db.Model):
             'persons': json.loads(self.persons),
             'contact_firstname': self.contact_firstname,
             'contact_lastname': self.contact_lastname,
+            'contact_birthdate': self.contact_birthdate,
             'phone_number': self.phone_number,
             'email': self.email,
+            'cake_donation': self.cake_donation,
+            'help_organisation': self.help_organisation,
             'confirmed': self.confirmed,
             'created_at': self.created_at.strftime("%d.%m.%Y %H:%M")
         }
@@ -222,12 +229,33 @@ class RegistrationForm(FlaskForm):
             Length(max=100, message="E-Mail darf maximal 100 Zeichen lang sein")
         ]
     )
+    cake_donation = SelectField(
+        "Kuchenspende",
+        choices=[
+            ('', 'Option auswählen'),
+            ('Wir spenden einen Rührkuchen für den Freitag.', 'Wir spenden einen Rührkuchen für den Freitag.'),
+            ('Wir spenden einen Kuchen für den Sonntag.', 'Wir spenden einen Kuchen für den Sonntag.')
+        ],
+        validators=[
+            DataRequired(message="Kuchenspende-Option ist erforderlich")
+        ]
+    )
+    
+    help_organisation = SelectField(
+        "Auf-/Abbau",
+        choices=[
+            ('', 'Option auswählen'),
+            ('Wir helfen beim Aufbau am Donnerstag, 17. Juli ab 18:00 Uhr.', 'Wir helfen beim Aufbau am Donnerstag, 17. Juli ab 18:00 Uhr.'),
+            ('Wir helfen beim Aufbau am Sonntag, 20. Juli ab 13:00 Uhr.', 'Wir helfen beim Aufbau am Sonntag, 20. Juli ab 13:00 Uhr.')
+        ],
+        validators=[
+            DataRequired(message="Auf-/Abbau-Option ist erforderlich")
+        ]
+    )
     
 class DeleteForm(FlaskForm):
     """Form for CSRF protection on delete operations"""
     submit = SubmitField('Löschen')
-
-# [Previous code remains the same up to the forms...]
 
 # Utility Functions
 def admin_required(f):
@@ -250,19 +278,32 @@ def safe_commit() -> bool:
         app.logger.error(f"Database error: {str(e)}")
         return False
 
+def validate_child_age(birth_date_str):
+    """Validiere dass Kinder zwischen 6-11 Jahre alt sind (1.-5. Klasse)"""
+    age = calculate_age(birth_date_str)
+    if age and (age < 6 or age > 11):
+        return False, f"Kind ist {age} Jahre alt. Zeltlager ist für 1.-5. Klasse (6-11 Jahre)."
+    return True, None
+
 def validate_registration_data(data: Dict) -> Tuple[bool, Optional[str]]:
     """Validate registration request data"""
     if not isinstance(data, dict):
         return False, "Invalid request format"
     
-    required_fields = ["contact_firstname", "contact_lastname", "contact_birthdate", "phone_number", "email"]
+    required_fields = ["contact_firstname", "contact_lastname", "contact_birthdate", "phone_number", "email", "cake_donation", "help_organisation"]
     missing_fields = [field for field in required_fields if not data.get(field)]
     if missing_fields:
         return False, f"Missing required fields: {', '.join(missing_fields)}"
     
     persons_data = data.get("persons", [])
     if not persons_data:
-        return False, "Mindestens eine Person muss hinzugefügt werden."
+        return False, "Mindestens ein Kind muss hinzugefügt werden."
+
+    for i, person in enumerate(persons_data, 1):
+        if 'birthdate' in person:
+            is_valid_age, age_error = validate_child_age(person['birthdate'])
+            if not is_valid_age:
+                return False, f"Kind {i}: {age_error}"
 
     return True, None
 
@@ -289,14 +330,36 @@ def send_confirmation_email(app, entry_id):
 
             # Load email template
             template_path = os.path.join(app.root_path, 'templates', 'emails', 'confirmation.txt')
-            with open(template_path, 'r', encoding='utf-8') as f:
-                template = f.read()
+            try:
+                with open(template_path, 'r', encoding='utf-8') as f:
+                    template = f.read()
+                
+                # Format template with registration data
+                email_body = template.format(
+                    **entry.to_dict(), 
+                    persons_details=format_persons_details(json.loads(entry.persons))
+                )
+            except FileNotFoundError:
+                # Fallback email template
+                email_body = f"""
+Liebe/r {entry.contact_firstname} {entry.contact_lastname},
+
+vielen Dank für Ihre Anmeldung zum Zeltlager 2025!
+
+Ihre Anmeldedaten:
+- Kontaktperson: {entry.contact_firstname} {entry.contact_lastname}
+- E-Mail: {entry.email}
+- Telefon: {entry.phone_number}
+- Kuchenspende: {entry.cake_donation}
+- Auf-/Abbau: {entry.help_organisation}
+
+Angemeldete Kinder:
+{format_persons_details(json.loads(entry.persons))}
+
+Mit freundlichen Grüßen
+Ihr Zeltlager-Team
+                """
             
-            # Format template with registration data
-            email_body = template.format(
-                **entry.to_dict(), 
-                persons_details=format_persons_details(json.loads(entry.persons))
-            )
             msg.attach(MIMEText(email_body, "plain"))
 
             with smtplib.SMTP(app.config['SMTP_SERVER'], app.config['SMTP_PORT']) as server:
@@ -335,19 +398,18 @@ def sanitize_input(value):
 def calculate_age(birth_date_str, reference_date=None):
     """Calculate age on a specific date based on birth date"""
     try:
-        # Falls kein Referenzdatum angegeben, verwende aktuelles Datum
         if reference_date is None:
             reference_date = datetime.now()
             
         birth_date = datetime.strptime(birth_date_str, '%Y-%m-%d')
         age = reference_date.year - birth_date.year
+        
         # Adjust age if birthday hasn't occurred yet in the reference year
         if (reference_date.month, reference_date.day) < (birth_date.month, birth_date.day):
             age -= 1
         return age
     except (ValueError, TypeError):
         return None
-
 
 # Routes
 @app.route("/", methods=["GET", "POST"])
@@ -378,7 +440,9 @@ def register():
                 "contact_lastname": sanitize_input(data["contact_lastname"]),
                 "contact_birthdate": sanitize_input(data["contact_birthdate"]),
                 "phone_number": sanitize_input(data["phone_number"]),
-                "email": sanitize_input(data["email"].lower())
+                "email": sanitize_input(data["email"].lower()),
+                "cake_donation": sanitize_input(data["cake_donation"]),
+                "help_organisation": sanitize_input(data["help_organisation"])
             }
 
             # Store in session
@@ -439,20 +503,9 @@ def confirmation():
 @limiter.limit("5 per minute")
 def admin_login():
     """Handle admin login"""
-    # Debug: Print environment and config state
-    print("Environment Variables:")
-    print(f"ADMIN_PASSWORD in env: {'ADMIN_PASSWORD' in os.environ}")
-    print(f"ADMIN_PASSWORD in config: {'ADMIN_PASSWORD' in app.config}")
-    
     if request.method == "POST":
         password = request.form.get('password')
         expected_password = app.config['ADMIN_PASSWORD']
-        
-        # Debug: Print password comparison details (redacted for security)
-        print(f"Received password length: {len(password) if password else 0}")
-        print(f"Expected password length: {len(expected_password) if expected_password else 0}")
-        print(f"Password provided: {'yes' if password else 'no'}")
-        print(f"Using default password: {'yes' if expected_password == 'default_admin_password' else 'no'}")
         
         if not password:
             flash("Bitte geben Sie ein Passwort ein.", "danger")
@@ -462,7 +515,6 @@ def admin_login():
             app.logger.error("No admin password configured")
         else:
             is_match = compare_digest(password, expected_password)
-            print(f"Password match: {is_match}")  # Debug
             
             if is_match:
                 session["admin_logged_in"] = True
@@ -495,19 +547,14 @@ def admin():
         
         registrations_data = []
         timezone = pytz.timezone("Europe/Berlin")
-        
-        # Referenzdatum für Altersberechnung
-        reference_date = datetime.now()
         total_children = 0
         
         for reg in registrations:
             try:
                 persons_data = json.loads(reg.persons)
                 
-                
-                # Zähle Personen und prüfe Alter
-                for person in persons_data:
-                    total_children += 1
+                # Zähle alle angemeldeten Kinder
+                total_children += len(persons_data)
                 
                 reg_dict = {
                     'id': reg.id,
@@ -516,11 +563,14 @@ def admin():
                     'contact_birthdate': getattr(reg, 'contact_birthdate', None),
                     'phone_number': reg.phone_number,
                     'email': reg.email,
+                    'cake_donation': reg.cake_donation,
+                    'help_organisation': reg.help_organisation,
                     'confirmed': reg.confirmed,
                     'persons': persons_data,
                     'created_at': reg.created_at.astimezone(timezone).strftime("%d.%m.%Y %H:%M")
                 }
                 registrations_data.append(reg_dict)
+                
             except Exception as person_error:
                 app.logger.error(f"Error processing registration {reg.id}: {str(person_error)}")
                 app.logger.error(f"Problematic persons data: {reg.persons}")
@@ -531,7 +581,7 @@ def admin():
             'total_children': total_children
         }
 
-        app.logger.info(f"Stats: {stats}")
+        app.logger.info(f"Admin dashboard stats: {stats}")
 
         return render_template(
             "admin.html",
@@ -568,7 +618,7 @@ def confirm_mail(entry_id: int):
         # Send email in background thread
         threading.Thread(
             target=send_confirmation_email,
-            args=(app, entry_id),  # Pass app and entry_id
+            args=(app, entry_id),
             daemon=True
         ).start()
 
@@ -633,18 +683,20 @@ def export_excel():
             .order_by(Registration.created_at.desc())\
             .all()
         
+        if not registrations:
+            flash("Keine Daten zum Exportieren vorhanden.", "warning")
+            return redirect(url_for("admin"))
+        
         # Zwei separate Datensätze anlegen
         participants_data = []  # Für angemeldete Personen
         companions_data = []    # Für Begleitpersonen
         
         # Referenzdatum für Altersberechnung
         reference_date = datetime.now()
-
-        # Formatiere das Datum für die Spaltenüberschrift
         date_str = reference_date.strftime("%d.%m.%Y")
         
         for reg in registrations:
-            # Daten für Begleitperson
+            # Daten für Begleitperson/Kontaktperson
             companion_age = calculate_age(reg.contact_birthdate, reference_date) if reg.contact_birthdate else None
             age_group = "Erwachsener (ab 18)" if companion_age and companion_age >= 18 else "Kind/Jugendl. (bis 17)"
             
@@ -656,56 +708,54 @@ def export_excel():
                 "Altersgruppe": age_group,
                 "Telefon": reg.phone_number,
                 "E-Mail": reg.email,
+                "Kuchenspende": reg.cake_donation,
+                "Auf-/Abbau": reg.help_organisation,
                 "Anmeldung bestätigt": "Ja" if reg.confirmed else "Nein",
                 "Anmeldezeitpunkt": reg.created_at.astimezone(pytz.timezone("Europe/Berlin")).strftime("%d.%m.%Y %H:%M")
             })
             
-            # Daten für angemeldete Personen
-            persons = json.loads(reg.persons)
-            for person in persons:
-                person_age = calculate_age(person.get('birthdate'), reference_date)
-                age_group = "Erwachsener (ab 18)" if person_age and person_age >= 18 else "Kind/Jugendl. (bis 17)"
-                
-                participants_data.append({
-                    "Vorname": person.get('person_firstname'),
-                    "Nachname": person.get('person_lastname'),
-                    "Geburtsdatum": person.get('birthdate'),
-                    f"Alter am {date_str}": person_age if person_age is not None else "Unbekannt",
-                    "Altersgruppe": age_group,
-                    "Vereinsmitgliedschaft": person.get('club_membership'),
-                    "Kontaktperson": f"{reg.contact_firstname} {reg.contact_lastname}",
-                    "Anmeldung bestätigt": "Ja" if reg.confirmed else "Nein",
-                    "Anmeldezeitpunkt": reg.created_at.astimezone(pytz.timezone("Europe/Berlin")).strftime("%d.%m.%Y %H:%M")
-                })
+            # Daten für angemeldete Personen (Kinder)
+            try:
+                persons = json.loads(reg.persons)
+                for person in persons:
+                    person_age = calculate_age(person.get('birthdate'), reference_date)
+                    age_group = "Erwachsener (ab 18)" if person_age and person_age >= 18 else "Kind/Jugendl. (bis 17)"
+                    
+                    participants_data.append({
+                        "Vorname": person.get('person_firstname', ''),
+                        "Nachname": person.get('person_lastname', ''),
+                        "Geburtsdatum": person.get('birthdate', ''),
+                        f"Alter am {date_str}": person_age if person_age is not None else "Unbekannt",
+                        "Altersgruppe": age_group,
+                        "Vereinsmitgliedschaft": person.get('club_membership', ''),
+                        "Kontaktperson": f"{reg.contact_firstname} {reg.contact_lastname}",
+                        "Anmeldung bestätigt": "Ja" if reg.confirmed else "Nein",
+                        "Anmeldezeitpunkt": reg.created_at.astimezone(pytz.timezone("Europe/Berlin")).strftime("%d.%m.%Y %H:%M")
+                    })
+            except (json.JSONDecodeError, TypeError) as e:
+                app.logger.error(f"Error parsing persons data for registration {reg.id}: {e}")
 
-        # Statistiken zur Anmeldung
-        total_adults = sum(1 for p in participants_data 
-                          if p["Altersgruppe"] == "Erwachsener")
-        total_adults += sum(1 for c in companions_data 
-                           if c["Altersgruppe"] == "Erwachsener")
+        # Statistiken berechnen
+        total_adults = sum(1 for p in participants_data if p["Altersgruppe"] == "Erwachsener (ab 18)")
+        total_adults += sum(1 for c in companions_data if c["Altersgruppe"] == "Erwachsener (ab 18)")
         
-        total_children = sum(1 for p in participants_data 
-                            if p["Altersgruppe"] == "Kind/Jugendl.")
-        total_children += sum(1 for c in companions_data 
-                             if c["Altersgruppe"] == "Kind/Jugendl.")
+        total_children = sum(1 for p in participants_data if p["Altersgruppe"] == "Kind/Jugendl. (bis 17)")
+        total_children += sum(1 for c in companions_data if c["Altersgruppe"] == "Kind/Jugendl. (bis 17)")
         
-        # Bei leeren Daten abbrechen
-        if not participants_data and not companions_data:
-            flash("Keine Daten zum Exportieren vorhanden.", "warning")
-            return redirect(url_for("admin"))
-            
         # DataFrames erstellen
-        participants_df = pd.DataFrame(participants_data)
-        companions_df = pd.DataFrame(companions_data)
+        participants_df = pd.DataFrame(participants_data) if participants_data else pd.DataFrame()
+        companions_df = pd.DataFrame(companions_data) if companions_data else pd.DataFrame()
         
         # Statistik-DataFrame erstellen
         stats_data = [
             ["Gesamt Anmeldungen", len(companions_data)],
             ["Bestätigte Anmeldungen", sum(1 for c in companions_data if c["Anmeldung bestätigt"] == "Ja")],
-            ["Anzahl Kinder", total_children]
+            ["Anzahl angemeldete Kinder", len(participants_data)],
+            ["Anzahl Erwachsene", total_adults],
+            ["Anzahl Kinder/Jugendliche", total_children]
         ]
         stats_df = pd.DataFrame(stats_data, columns=["Statistik", "Anzahl"])
-        
+
         # Excel-Datei erstellen
         output = BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
