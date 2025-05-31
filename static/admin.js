@@ -19,6 +19,32 @@ const DeleteConfirmModal = ({ isOpen, onConfirm, onCancel }) => {
    );
 };
 
+const formatDate = (dateString) => {
+    if (!dateString) return '';
+    
+    // Erwartet YYYY-MM-DD Format aus der Datenbank
+    const parts = dateString.split('-');
+    if (parts.length === 3) {
+        const [year, month, day] = parts;
+        return `${day}.${month}.${year}`;
+    }
+    return dateString; // Fallback
+};
+
+const shortenCakeDonation = (cakeText) => {
+    if (!cakeText) return '';
+    if (cakeText.toLowerCase().includes('freitag')) return 'Freitag';
+    if (cakeText.toLowerCase().includes('sonntag')) return 'Sonntag';
+    return cakeText; // Fallback für unbekannte Texte
+};
+
+const shortenHelpOrganisation = (helpText) => {
+    if (!helpText) return '';
+    if (helpText.toLowerCase().includes('aufbau')) return 'Aufbau';
+    if (helpText.toLowerCase().includes('abbau')) return 'Abbau';
+    return helpText; // Fallback für unbekannte Texte
+};
+
 const AdminDashboard = () => {
    const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
    const { registrations, stats, csrfToken } = window.ADMIN_DATA;
@@ -66,18 +92,30 @@ const AdminDashboard = () => {
                </div>
 
                {/* Stats Cards */}
-               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                   <div className="bg-white p-6 rounded-lg shadow">
-                       <h3 className="text-lg font-semibold">Gesamt Anmeldungen</h3>
-                       <p className="text-3xl font-bold mt-2">{stats.total_registrations}</p>
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
+                   <div className="bg-white p-4 rounded-lg shadow">
+                       <h3 className="text-sm font-semibold text-gray-600">Anzahl Anmeldungen</h3>
+                       <p className="text-2xl font-bold mt-1 text-black">{stats.total_registrations}</p>
                    </div>
-                   <div className="bg-white p-6 rounded-lg shadow">
-                       <h3 className="text-lg font-semibold">Bestätigte Anmeldungen</h3>
-                       <p className="text-3xl font-bold mt-2">{stats.confirmed_registrations}</p>
+                   <div className="bg-white p-4 rounded-lg shadow">
+                       <h3 className="text-sm font-semibold text-gray-600">Angemeldete Kinder</h3>
+                       <p className="text-2xl font-bold mt-1 text-black">{stats.total_children}</p>
                    </div>
-                   <div className="bg-white p-6 rounded-lg shadow">
-                       <h3 className="text-lg font-semibold">Angemeldete Kinder</h3>
-                       <p className="text-3xl font-bold mt-2">{stats.total_children}</p>
+                   <div className="bg-white p-4 rounded-lg shadow">
+                       <h3 className="text-sm font-semibold text-gray-600">Kuchen Freitag</h3>
+                       <p className="text-2xl font-bold mt-1 text-black">{stats.cake_friday_count}</p>
+                   </div>
+                   <div className="bg-white p-4 rounded-lg shadow">
+                       <h3 className="text-sm font-semibold text-gray-600">Kuchen Sonntag</h3>
+                       <p className="text-2xl font-bold mt-1 text-black">{stats.cake_sunday_count}</p>
+                   </div>
+                   <div className="bg-white p-4 rounded-lg shadow">
+                       <h3 className="text-sm font-semibold text-gray-600">Aufbau Donnerstag</h3>
+                       <p className="text-2xl font-bold mt-1 text-black">{stats.help_thursday_count}</p>
+                   </div>
+                   <div className="bg-white p-4 rounded-lg shadow">
+                       <h3 className="text-sm font-semibold text-gray-600">Abbau Sonntag</h3>
+                       <p className="text-2xl font-bold mt-1 text-black">{stats.help_sunday_count}</p>
                    </div>
                </div>
 
@@ -91,10 +129,10 @@ const AdminDashboard = () => {
                                        Zeitstempel
                                    </th>
                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                       Personen
+                                       Kind/er
                                    </th>
                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                       Begleit-/Aufsichtsperson
+                                       Erziehungsberechtigte/r
                                    </th>
                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                        Aktionen
@@ -114,40 +152,30 @@ const AdminDashboard = () => {
                                            <td className="px-6 py-4">
                                                {registration.persons.map((person, idx) => (
                                                    <div key={idx} className="mb-2">
-                                                       <p className="font-medium">
-                                                           {person.person_firstname} {person.person_lastname}
-                                                       </p>
-                                                       <p className="text-sm">Geb.: {person.birthdate}</p>
-                                                       <p className="text-sm">
-                                                           Verein: {person.club_membership}
-                                                       </p>
+                                                       <p className="font-medium">{person.person_firstname} {person.person_lastname}</p>
+                                                       <p className="text-sm">Geb.: {formatDate(person.birthdate)}</p>
+                                                       <p className="text-sm">Verein: {person.club_membership}</p>
                                                    </div>
                                                ))}
                                            </td>
                                            <td className="px-6 py-4">
-                                               <p>Name: {registration.contact_firstname} {registration.contact_lastname}</p>
-                                               {registration.contact_birthdate && <p>Geb.: {registration.contact_birthdate}</p>}
-                                               <p>Telefonnummer: {registration.phone_number}</p>
-                                               <p>E-Mail: {registration.email}</p>
-                                               <p>Kuchenspende: {registration.cake_donation}</p>
-                                               <p>Auf-/Abbau: {registration.help_organisation}</p>
+                                                   <div className="mb-2">
+                                                       <p className="font-medium">{registration.contact_firstname} {registration.contact_lastname}</p>
+                                                       {registration.contact_birthdate && <p className="text-sm">Geb.: {formatDate(registration.contact_birthdate)}</p>}
+                                                       <p className="text-sm">Telefonnummer: {registration.phone_number}</p>
+                                                       <p className="text-sm">E-Mail: {registration.email}</p>
+                                                       <p className="text-sm">Kuchenspende am {shortenCakeDonation(registration.cake_donation)}</p>
+                                                       <p className="text-sm">Hilft beim {shortenHelpOrganisation(registration.help_organisation)}</p>
+                                                   </div>
                                            </td>
                                            <td className="px-6 py-4">
                                                <div className="flex flex-col space-y-2">
-                                                   <form action={`/confirm-mail/${registration.id}`} method="post">
-                                                       <input type="hidden" name="csrf_token" value={csrfToken} />
-                                                       <button
-                                                           type="submit"
-                                                           className={`w-full px-4 py-2 text-white rounded-md ${
-                                                               registration.confirmed 
-                                                               ? 'bg-gray-400 cursor-not-allowed' 
-                                                               : 'bg-blue-600 hover:bg-blue-700'
-                                                           }`}
-                                                           disabled={registration.confirmed}
-                                                       >
-                                                           Bestätigen
-                                                       </button>
-                                                   </form>
+                                                   <a 
+                                                       href={`/edit-entry/${registration.id}`}
+                                                       className="w-full px-4 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded-md text-center block no-underline"
+                                                   >
+                                                       Bearbeiten
+                                                   </a>
                                                    <form ref={formRef} action={`/delete-entry/${registration.id}`} method="post">
                                                        <input type="hidden" name="csrf_token" value={csrfToken} />
                                                        <button

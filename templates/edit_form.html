@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eintrag bearbeiten - Zeltlager 2025</title>
+    <link rel="icon" type="image/jpg" href="{{ url_for('static', filename='Wappen_TSV-Bitzfeld-TSV-Schwabbach.png') }}">
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" nonce="{{ csp_nonce }}"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" nonce="{{ csp_nonce }}"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js" nonce="{{ csp_nonce }}"></script>
+</head>
+<body class="min-h-screen bg-gray-50">
+    <!-- Container mit Admin Dashboard Design -->
+    <div class="min-h-screen bg-gray-50 p-4 md:p-8">
+        <div class="max-w-7xl mx-auto">
+            <!-- Header im Admin Dashboard Stil -->
+            <div class="flex justify-between items-center mb-8">
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-900">Eintrag bearbeiten</h1>
+                    <p class="text-gray-600 mt-1">Zeltlager 2025</p>
+                </div>
+                <div class="flex gap-4">
+                    <a 
+                        href="{{ url_for('admin') }}"
+                        class="inline-flex items-center px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+                    >
+                        ← Zurück zur Übersicht
+                    </a>
+                </div>
+            </div>
+
+            <!-- React App Root -->
+            <div id="edit-form-root"></div>
+        </div>
+    </div>
+
+    <!-- Flash Messages Container -->
+    <div id="flash-messages"></div>
+
+    <script type="text/babel" nonce="{{ csp_nonce }}">
+        // Daten aus Backend
+        window.EDIT_DATA = {{ data | tojson | safe }};
+        window.CSRF_TOKEN = "{{ csrf_token }}";
+
+        const { useState } = React;
+
+        const EditForm = () => {
+            const [formData, setFormData] = useState({
+                contact_firstname: window.EDIT_DATA.contact_firstname || '',
+                contact_lastname: window.EDIT_DATA.contact_lastname || '',
+                contact_birthdate: window.EDIT_DATA.contact_birthdate || '',
+                phone_number: window.EDIT_DATA.phone_number || '',
+                email: window.EDIT_DATA.email || '',
+                cake_donation: window.EDIT_DATA.cake_donation || '',
+                help_organisation: window.EDIT_DATA.help_organisation || '',
+                persons: window.EDIT_DATA.persons && window.EDIT_DATA.persons.length > 0 
+                    ? window.EDIT_DATA.persons 
+                    : [{ person_firstname: '', person_lastname: '', birthdate: '', club_membership: '' }]
+            });
+            
+            const [isSubmitting, setIsSubmitting] = useState(false);
+            const [errors, setErrors] = useState({});
+
+            const handleInputChange = (field, value) => {
+                setFormData(prev => ({
+                    ...prev,
+                    [field]: value
+                }));
+                // Clear error when user starts typing
+                if (errors[field]) {
+                    setErrors(prev => ({
+                        ...prev,
+                        [field]: ''
+                    }));
+                }
+            };
+
+            const handlePersonChange = (index, field, value) => {
+                const newPersons = [...formData.persons];
+                newPersons[index] = {
+                    ...newPersons[index],
+                    [field]: value
+                };
+                setFormData(prev => ({
+                    ...prev,
+                    persons: newPersons
+                }));
+            };
+
+            const addPerson = () => {
+                setFormData(prev => ({
+                    ...prev,
+                    persons: [...prev.persons, { person_firstname: '', person_lastname: '', birthdate: '', club_membership: '' }]
+                }));
+            };
+
+            const removePerson = (index) => {
+                if (formData.persons.length > 1) {
+                    const newPersons = formData.persons.filter((_, i) => i !== index);
+                    setFormData(prev => ({
+                        ...prev,
+                        persons: newPersons
+                    }));
+                }
+            };
+
+            const validateAge = (birthdate) => {
+                if (!birthdate) return { valid: false, message: 'Geburtsdatum ist erforderlich' };
+                
+                const birthDate = new Date(birthdate);
+                const today = new Date();
+                let age = today.getFullYear() - birthDate.getFullYear();
+                const monthDiff = today.getMonth() - birthDate.getMonth();
+                
+                if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                    age--;
+                }
+                
+                if (age < 6 || age > 11) {
+                    return { valid: false, message: `Kind ist ${age} Jahre alt. Zeltlager ist für 1.-5. Klasse (6-11 Jahre).` };
+                }
+                
+                return { valid: true, message: '' };
+            };
+
+            const validateForm = () => {
+                const newErrors = {};
+                
+                // Kontaktdaten validieren
+                if (!formData.contact_firstname.trim()) newErrors.contact_firstname = 'Vorname ist erforderlich';
+                if (!formData.contact_lastname.trim()) newErrors.contact_lastname = 'Nachname ist erforderlich';
+                if (!formData.contact_birthdate) newErrors.contact_birthdate = 'Geburtsdatum ist erforderlich';
+                if (!formData.phone_number.trim()) newErrors.phone_number = 'Telefonnummer ist erforderlich';
+                if (!formData.email.trim()) newErrors.email = 'E-Mail ist erforderlich';
+                if (!formData.cake_donation) newErrors.cake_donation = 'Kuchenspende-Option ist erforderlich';
+                if (!formData.help_organisation) newErrors.help_organisation = 'Auf-/Abbau-Option ist erforderlich';
+
+                // E-Mail-Format validieren
+                if (formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+                    newErrors.email = 'Ungültige E-Mail-Adresse';
+                }
+
+                // Personen validieren
+                formData.persons.forEach((person, index) => {
+                    if (!person.person_firstname.trim()) newErrors[`person_${index}_firstname`] = 'Vorname ist erforderlich';
+                    if (!person.person_lastname.trim()) newErrors[`person_${index}_lastname`] = 'Nachname ist erforderlich';
+                    if (!person.club_membership.trim()) newErrors[`person_${index}_club`] = 'Vereinsmitgliedschaft ist erforderlich';
+                    
+                    // Altersvalidierung
+                    const ageValidation = validateAge(person.birthdate);
+                    if (!ageValidation.valid) {
+                        newErrors[`person_${index}_birthdate`] = ageValidation.message;
+                    }
+                });
+
+                setErrors(newErrors);
+                return Object.keys(newErrors).length === 0;
+            };
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                
+                if (!validateForm()) {
+                    showFlashMessage('Bitte überprüfen Sie Ihre Eingaben.', 'error');
+                    return;
+                }
+
+                setIsSubmitting(true);
+
+                try {
+                    const response = await fetch(`/edit-entry/${window.EDIT_DATA.id}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'X-CSRFToken': window.CSRF_TOKEN
+                        },
+                        body: JSON.stringify(formData)
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        showFlashMessage('Eintrag erfolgreich bearbeitet!', 'success');
+                        setTimeout(() => {
+                            window.location.href = result.redirect;
+                        }, 1500);
+                    } else {
+                        showFlashMessage(result.error || 'Ein Fehler ist aufgetreten', 'error');
+                    }
+                } catch (error) {
+                    console.error('Submit error:', error);
+                    showFlashMessage('Netzwerkfehler. Bitte versuchen Sie es erneut.', 'error');
+                } finally {
+                    setIsSubmitting(false);
+                }
+            };
+
+            const showFlashMessage = (message, type) => {
+                const flashDiv = document.createElement('div');
+                flashDiv.className = 'flash-message';
+                flashDiv.textContent = message;
+                flashDiv.style.position = 'fixed';
+                flashDiv.style.top = '50%';
+                flashDiv.style.left = '50%';
+                flashDiv.style.transform = 'translate(-50%, -50%)';
+                flashDiv.style.backgroundColor = 'rgba(0, 0, 0, 1)';
+                flashDiv.style.color = 'white';
+                flashDiv.style.padding = '15px 30px';
+                flashDiv.style.borderRadius = '8px';
+                flashDiv.style.zIndex = '1000';
+                flashDiv.style.textAlign = 'center';
+                
+                document.body.appendChild(flashDiv);
+                
+                setTimeout(() => {
+                    flashDiv.style.transition = 'opacity 0.5s';
+                    flashDiv.style.opacity = '0';
+                    setTimeout(() => flashDiv.remove(), 500);
+                }, 3000);
+            };
+
+            return (
+                <div className="space-y-6">
+                    <form onSubmit={handleSubmit} className="space-y-6">
+                        {/* Kontaktdaten Card im Admin Dashboard Stil */}
+                        <div className="bg-white rounded-lg shadow overflow-hidden">
+                            <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+                                <h2 className="text-lg font-semibold text-gray-900">Kontaktdaten</h2>
+                            </div>
+                            <div className="p-6">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Vorname *
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={formData.contact_firstname}
+                                            onChange={(e) => handleInputChange('contact_firstname', e.target.value)}
+                                            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                                                errors.contact_firstname ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                                            }`}
+                                        />
+                                        {errors.contact_firstname && (
+                                            <p className="text-red-500 text-sm mt-1">{errors.contact_firstname}</p>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Nachname *
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={formData.contact_lastname}
+                                            onChange={(e) => handleInputChange('contact_lastname', e.target.value)}
+                                            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                                                errors.contact_lastname ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                                            }`}
+                                        />
+                                        {errors.contact_lastname && (
+                                            <p className="text-red-500 text-sm mt-1">{errors.contact_lastname}</p>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Geburtsdatum *
+                                        </label>
+                                        <input
+                                            type="date"
+                                            value={formData.contact_birthdate}
+                                            onChange={(e) => handleInputChange('contact_birthdate', e.target.value)}
+                                            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                                                errors.contact_birthdate ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                                            }`}
+                                        />
+                                        {errors.contact_birthdate && (
+                                            <p className="text-red-500 text-sm mt-1">{errors.contact_birthdate}</p>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Telefonnummer *
+                                        </label>
+                                        <input
+                                            type="tel"
+                                            value={formData.phone_number}
+                                            onChange={(e) => handleInputChange('phone_number', e.target.value)}
+                                            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                                                errors.phone_number ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                                            }`}
+                                        />
+                                        {errors.phone_number && (
+                                            <p className="text-red-500 text-sm mt-1">{errors.phone_number}</p>
+                                        )}
+                                    </div>
+
+                                    <div className="md:col-span-2">
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            E-Mail *
+                                        </label>
+                                        <input
+                                            type="email"
+                                            value={formData.email}
+                                            onChange={(e) => handleInputChange('email', e.target.value)}
+                                            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                                                errors.email ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                                            }`}
+                                        />
+                                        {errors.email && (
+                                            <p className="text-red-500 text-sm mt-1">{errors.email}</p>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Kinder Card im Admin Dashboard Stil */}
+                        <div className="bg-white rounded-lg shadow overflow-hidden">
+                            <div className="px-6 py-4 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+                                <h2 className="text-lg font-semibold text-gray-900">Angemeldete Kinder</h2>
+                                <button
+                                    type="button"
+                                    onClick={addPerson}
+                                    className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                                >
+                                    + Kind hinzufügen
+                                </button>
+                            </div>
+                            <div className="p-6 space-y-6">
+                                {formData.persons.map((person, index) => (
+                                    <div key={index} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                                        <div className="flex justify-between items-center mb-4">
+                                            <h3 className="text-lg font-medium text-gray-900">Kind {index + 1}</h3>
+                                            {formData.persons.length > 1 && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removePerson(index)}
+                                                    className="inline-flex items-center px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700"
+                                                >
+                                                    Entfernen
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                    Vorname *
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={person.person_firstname}
+                                                    onChange={(e) => handlePersonChange(index, 'person_firstname', e.target.value)}
+                                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white ${
+                                                        errors[`person_${index}_firstname`] ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                                                    }`}
+                                                />
+                                                {errors[`person_${index}_firstname`] && (
+                                                    <p className="text-red-500 text-sm mt-1">{errors[`person_${index}_firstname`]}</p>
+                                                )}
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                    Nachname *
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={person.person_lastname}
+                                                    onChange={(e) => handlePersonChange(index, 'person_lastname', e.target.value)}
+                                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white ${
+                                                        errors[`person_${index}_lastname`] ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                                                    }`}
+                                                />
+                                                {errors[`person_${index}_lastname`] && (
+                                                    <p className="text-red-500 text-sm mt-1">{errors[`person_${index}_lastname`]}</p>
+                                                )}
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                    Geburtsdatum *
+                                                </label>
+                                                <input
+                                                    type="date"
+                                                    value={person.birthdate}
+                                                    onChange={(e) => handlePersonChange(index, 'birthdate', e.target.value)}
+                                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white ${
+                                                        errors[`person_${index}_birthdate`] ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                                                    }`}
+                                                />
+                                                {errors[`person_${index}_birthdate`] && (
+                                                    <p className="text-red-500 text-sm mt-1">{errors[`person_${index}_birthdate`]}</p>
+                                                )}
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                    Vereinsmitgliedschaft *
+                                                </label>
+                                                <select
+                                                    value={person.club_membership}
+                                                    onChange={(e) => handlePersonChange(index, 'club_membership', e.target.value)}
+                                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white ${
+                                                        errors[`person_${index}_club`] ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                                                    }`}
+                                                >
+                                                    <option value="">Verein auswählen</option>
+                                                    <option value="TSV Bitzfeld 1922 e.V.">TSV Bitzfeld 1922 e.V.</option>
+                                                    <option value="TSV Schwabbach 1947 e.V.">TSV Schwabbach 1947 e.V.</option>
+                                                </select>
+                                                {errors[`person_${index}_club`] && (
+                                                    <p className="text-red-500 text-sm mt-1">{errors[`person_${index}_club`]}</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Zusätzliche Informationen Card im Admin Dashboard Stil */}
+                        <div className="bg-white rounded-lg shadow overflow-hidden">
+                            <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+                                <h2 className="text-lg font-semibold text-gray-900">Zusätzliche Informationen</h2>
+                            </div>
+                            <div className="p-6">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Kuchenspende *
+                                        </label>
+                                        <select
+                                            value={formData.cake_donation}
+                                            onChange={(e) => handleInputChange('cake_donation', e.target.value)}
+                                            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                                                errors.cake_donation ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                                            }`}
+                                        >
+                                            <option value="">Option auswählen</option>
+                                            <option value="Wir spenden einen Rührkuchen für den Freitag.">
+                                                Wir spenden einen Rührkuchen für den Freitag.
+                                            </option>
+                                            <option value="Wir spenden einen Kuchen für den Sonntag.">
+                                                Wir spenden einen Kuchen für den Sonntag.
+                                            </option>
+                                        </select>
+                                        {errors.cake_donation && (
+                                            <p className="text-red-500 text-sm mt-1">{errors.cake_donation}</p>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Auf-/Abbau *
+                                        </label>
+                                        <select
+                                            value={formData.help_organisation}
+                                            onChange={(e) => handleInputChange('help_organisation', e.target.value)}
+                                            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                                                errors.help_organisation ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                                            }`}
+                                        >
+                                            <option value="">Option auswählen</option>
+                                            <option value="Wir helfen beim Aufbau am Donnerstag, 17. Juli ab 18:00 Uhr.">
+                                                Wir helfen beim Aufbau am Donnerstag, 17. Juli ab 18:00 Uhr.
+                                            </option>
+                                            <option value="Wir helfen beim Abbau am Sonntag, 20. Juli ab 13:00 Uhr.">
+                                                Wir helfen beim Abbau am Sonntag, 20. Juli ab 13:00 Uhr.
+                                            </option>
+                                        </select>
+                                        {errors.help_organisation && (
+                                            <p className="text-red-500 text-sm mt-1">{errors.help_organisation}</p>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Action Buttons im Admin Dashboard Stil */}
+                        <div className="bg-white rounded-lg shadow overflow-hidden">
+                            <div className="p-6">
+                                <div className="flex justify-end space-x-4">
+                                    <a 
+                                        href="{{ url_for('admin') }}"
+                                        className="inline-flex items-center px-6 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+                                    >
+                                        Abbrechen
+                                    </a>
+                                    <button
+                                        type="submit"
+                                        disabled={isSubmitting}
+                                        className={`inline-flex items-center px-6 py-2 text-white rounded-md ${
+                                            isSubmitting 
+                                                ? 'bg-gray-400 cursor-not-allowed' 
+                                                : 'bg-blue-600 hover:bg-blue-700'
+                                        }`}
+                                    >
+                                        {isSubmitting ? 'Speichere...' : 'Änderungen speichern'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            );
+        };
+
+        // Flash message handling function (identisch zum Admin Dashboard)
+        function handleFlashMessages() {
+            document.querySelectorAll('.flash-message:not([data-handled])').forEach(message => {
+                message.dataset.handled = 'true';
+                
+                // Style for centered, boxed messages
+                message.style.position = 'fixed';
+                message.style.top = '50%';
+                message.style.left = '50%';
+                message.style.transform = 'translate(-50%, -50%)';
+                message.style.backgroundColor = 'rgba(0, 0, 0, 1)';
+                message.style.color = 'white';
+                message.style.padding = '15px 30px';
+                message.style.borderRadius = '8px';
+                message.style.zIndex = '1000';
+                message.style.textAlign = 'center';
+                
+                // Fade out and remove after 3 seconds
+                setTimeout(() => {
+                    message.style.transition = 'opacity 0.5s';
+                    message.style.opacity = '0';
+                    setTimeout(() => message.remove(), 500);
+                }, 3000);
+            });
+        }
+
+        // Render the component
+        const root = ReactDOM.createRoot(document.getElementById('edit-form-root'));
+        root.render(<EditForm />);
+
+        // Handle any existing flash messages
+        handleFlashMessages();
+    </script>
+</body>
+</html>

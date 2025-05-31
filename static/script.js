@@ -9,23 +9,21 @@ const SELECTORS = {
 
 // Main initialization function
 document.addEventListener('DOMContentLoaded', () => {
-    initializePaymentControls();
     initializePersonFormHandling();
     initializeFormSubmission();
     handleFlashMessages();
+    console.log('Script initialized');
 });
-
-// Payment controls initialization
-function initializePaymentControls() {
-    console.log('Payment controls initialized - Bank transfer only');
-}
 
 // Person form handling
 function initializePersonFormHandling() {
     const addButton = document.querySelector(SELECTORS.ADD_PERSON_BUTTON);
     const container = document.querySelector(SELECTORS.PERSONS_CONTAINER);
 
-    if (!addButton || !container) return;
+    if (!addButton || !container) {
+        console.error('Add button or container not found');
+        return;
+    }
 
     addButton.addEventListener('click', () => addPersonForm(container));
     container.addEventListener('click', handlePersonFormRemoval);
@@ -63,7 +61,7 @@ function validateForm() {
                     }
                     break;
                 case 'tel':
-                    if (!/^(?:\d{4}[- ]?\d{7}|\d{4}[- ]?\d{8}|\d{5}[- ]?\d{6}|\d{5}[- ]?\d{7})$/.test(field.value.trim())) {
+                    if (!/^\+?[0-9\s-]+$/.test(field.value.trim())) {
                         errorMessage = 'Ungültiges Telefonnummerformat';
                     }
                     break;
@@ -78,12 +76,6 @@ function validateForm() {
                     if (field.value === '' || field.value === field.querySelector('option').value) {
                         errorMessage = 'Bitte eine Option auswählen';
                     }
-                    if (field.name === 'cake_donation' && field.value === '') {
-                        errorMessage = 'Bitte wählen Sie eine Kuchenspende-Option aus';
-                    }
-                    if (field.name === 'help_organisation' && field.value === '') {
-                        errorMessage = 'Bitte wählen Sie eine Auf-/Abbau-Option aus';
-                    }
                     break;
             }
         }
@@ -96,11 +88,6 @@ function validateForm() {
             errorDiv.textContent = errorMessage;
             field.parentNode.insertBefore(errorDiv, field.nextSibling);
             field.classList.add('error-field');
-            
-            // Scroll to first error
-            if (isValid === false) {
-                field.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
         }
     });
     
@@ -142,7 +129,7 @@ function addFlashMessage(message, type) {
     flashMsg.classList.add('flash-message', type);
     flashMsg.textContent = message;
     document.body.appendChild(flashMsg);
-    handleFlashMessages(flashMsg);
+    handleFlashMessages();
 }
 
 function addPersonForm(container) {
@@ -219,39 +206,52 @@ function updatePersonFormIndices(form, newIndex) {
 // Form submission handling
 function initializeFormSubmission() {
     const form = document.querySelector(SELECTORS.REGISTRATION_FORM);
-    if (!form) return;
+    if (!form) {
+        console.error('Registration form not found');
+        return;
+    }
     form.addEventListener('submit', handleFormSubmit);
+    console.log('Form submission initialized');
 }
 
 async function handleFormSubmit(event) {
     event.preventDefault();
+    console.log('Form submitted');
     
     if (!validateForm()) {
+        console.log('Form validation failed');
         return;
     }
 
     try {
         const formData = collectFormData();
-        if (!formData) return;
+        if (!formData) {
+            console.log('Form data collection failed');
+            return;
+        }
 
+        console.log('Submitting form data:', formData);
         const response = await submitForm(formData);
         handleSubmissionResponse(response);
     } catch (error) {
         console.error('Submission error:', error);
-        addFlashMessage(`❌Fehler beim Absenden: ${error.message}`, 'error');
+        addFlashMessage(`❌ Fehler beim Absenden: ${error.message}`, 'error');
     }
 }
 
 function collectFormData() {
     const persons = collectPersonsData();
+    
+    console.log('Collected persons:', persons);
+    
     if (persons.length === 0) {
-        addFlashMessage('❌Bitte fügen Sie mindestens eine Person hinzu.', 'error');
+        addFlashMessage('❌ Bitte füllen Sie alle Felder für mindestens ein Kind aus.', 'error');
         return null;
     }
 
     const csrfToken = document.querySelector(SELECTORS.CSRF_TOKEN)?.value?.trim();
     if (!csrfToken) {
-        addFlashMessage('❌CSRF-Token fehlt. Bitte laden Sie die Seite neu.', 'error');
+        addFlashMessage('❌ CSRF-Token fehlt. Bitte laden Sie die Seite neu.', 'error');
         return null;
     }
 
@@ -259,35 +259,39 @@ function collectFormData() {
     const helpOrganisation = document.querySelector('select[name="help_organisation"]')?.value;
 
     if (!cakeDonation) {
-        addFlashMessage('❌Bitte wählen Sie eine Kuchenspende-Option aus.', 'error');
+        addFlashMessage('❌ Bitte wählen Sie eine Kuchenspende-Option aus.', 'error');
         return null;
     }
 
     if (!helpOrganisation) {
-        addFlashMessage('❌Bitte wählen Sie eine Auf-/Abbau-Option aus.', 'error');
+        addFlashMessage('❌ Bitte wählen Sie eine Auf-/Abbau-Option aus.', 'error');
         return null;
     }
 
-    return {
+    const formData = {
         csrf_token: csrfToken,
         persons,
-        contact_firstname: document.getElementById('contact_firstname').value,
-        contact_lastname: document.getElementById('contact_lastname').value,
-        contact_birthdate: document.getElementById('contact_birthdate').value,
-        phone_number: document.getElementById('phone_number').value,
-        email: document.getElementById('email').value,
+        contact_firstname: document.getElementById('contact_firstname')?.value?.trim() || '',
+        contact_lastname: document.getElementById('contact_lastname')?.value?.trim() || '',
+        contact_birthdate: document.getElementById('contact_birthdate')?.value || '',
+        phone_number: document.getElementById('phone_number')?.value?.trim() || '',
+        email: document.getElementById('email')?.value?.trim() || '',
         cake_donation: cakeDonation,
         help_organisation: helpOrganisation
     };
+    
+    console.log('Form data to submit:', formData);
+    return formData;
 }
 
 function validatePersonData(personData) {
     if (!personData.person_firstname || !personData.person_lastname || 
         !personData.birthdate || !personData.club_membership) {
+        console.log('Person data incomplete:', personData);
         return false;
     }
     
-    // ✨ Altersvalidierung auch im Frontend
+    // Altersvalidierung
     const birthDate = new Date(personData.birthdate);
     const today = new Date();
     let age = today.getFullYear() - birthDate.getFullYear();
@@ -307,35 +311,71 @@ function validatePersonData(personData) {
 
 function collectPersonsData() {
     const persons = [];
-    document.querySelectorAll(SELECTORS.PERSON_FORM).forEach(form => {
+    
+    // Sammle Daten aus allen Person-Formularen (einschließlich dem ersten)
+    // Erweiterte Selektion um sicherzustellen, dass das erste Formular erfasst wird
+    const personForms = document.querySelectorAll('.person-form, #person_1, [id^="person_"]');
+    
+    console.log('Found person forms:', personForms.length);
+    
+    personForms.forEach((form, index) => {
+        console.log(`Processing form ${index + 1}:`, form);
+        
         const personData = {
-            person_firstname: form.querySelector('input[name^="person_firstname"]')?.value?.trim() || '',
-            person_lastname: form.querySelector('input[name^="person_lastname"]')?.value?.trim() || '',
-            birthdate: form.querySelector('input[name^="birthdate"]')?.value || '',
-            club_membership: form.querySelector('select[name^="club_membership"]')?.value || ''
+            person_firstname: form.querySelector('input[name^="person_firstname"], input[name*="person_firstname"]')?.value?.trim() || '',
+            person_lastname: form.querySelector('input[name^="person_lastname"], input[name*="person_lastname"]')?.value?.trim() || '',
+            birthdate: form.querySelector('input[name^="birthdate"], input[name*="birthdate"]')?.value || '',
+            club_membership: form.querySelector('select[name^="club_membership"], select[name*="club_membership"]')?.value || ''
         };
 
-        if (validatePersonData(personData)) {
-            persons.push(personData);
+        console.log(`Person data ${index + 1}:`, personData);
+
+        // Nur hinzufügen wenn alle Felder ausgefüllt sind
+        if (personData.person_firstname && personData.person_lastname && 
+            personData.birthdate && personData.club_membership) {
+            
+            if (validatePersonData(personData)) {
+                persons.push(personData);
+                console.log(`Added person ${index + 1} to list`);
+            }
+        } else {
+            console.log(`Person ${index + 1} incomplete, skipping`);
         }
     });
+    
+    console.log('Final persons array:', persons);
     return persons;
 }
 
 async function submitForm(formData) {
+    console.log('Sending request to server...');
+    
+    // Get CSRF token for headers
     const csrfToken = formData.csrf_token;
+    
     const response = await fetch('/', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'X-CSRFToken': csrfToken,
-            'X-Requested-With': 'XMLHttpRequest'  // Add this line
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': csrfToken  // Add CSRF token to headers
         },
         credentials: 'same-origin',
         body: JSON.stringify(formData)
     });
 
+    console.log('Response status:', response.status);
+    console.log('Response headers:', response.headers);
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Server error:', errorText);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
     const data = await response.json();
+    console.log('Server response:', data);
+    
     if (data.errors) {
         Object.entries(data.errors).forEach(([field, messages]) => {
             const input = document.querySelector(`[name="${field}"]`);
@@ -349,30 +389,21 @@ async function submitForm(formData) {
         });
         return { success: false };
     }
+    
     return data;
 }
 
 function handleSubmissionResponse(data) {
+    console.log('Handling response:', data);
+    
     if (data.success) {
         addFlashMessage('✅ Anmeldung erfolgreich! Sie werden weitergeleitet.', 'success');
-        setTimeout(() => window.location.href = '/confirmation', 3000);
+        setTimeout(() => {
+            const redirectUrl = data.redirect || '/confirmation';
+            console.log('Redirecting to:', redirectUrl);
+            window.location.href = redirectUrl;
+        }, 2000);
     } else {
-        addFlashMessage('❌ Fehler bei der Anmeldung: ' + data.error, 'error');
+        addFlashMessage('❌ Fehler bei der Anmeldung: ' + (data.error || 'Unbekannter Fehler'), 'error');
     }
 }
-
-// Handle delete confirmations
-const deleteButtons = document.querySelectorAll('.delete-button');
-deleteButtons.forEach(button => {
-    button.addEventListener('click', function(e) {
-        e.preventDefault();
-        const confirmDiv = document.createElement('div');
-        confirmDiv.classList.add('flash-message', 'warning');
-        confirmDiv.innerHTML = `
-            <p>Möchten Sie diesen Eintrag wirklich löschen?</p>
-            <button onclick="this.parentElement.remove();">Abbrechen</button>
-            <button onclick="this.closest('form').submit();">Löschen</button>
-        `;
-        document.body.appendChild(confirmDiv);
-    });
-});

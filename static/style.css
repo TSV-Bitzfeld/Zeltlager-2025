@@ -318,7 +318,7 @@ button {
     border: none;
     border-radius: 0.5rem;
     cursor: pointer;
-    width: 80%;
+    width: 100%;
     font-size: 1.2rem;
     font-weight: bold;
     transition: background 0.3s;
@@ -333,7 +333,7 @@ button:hover, .button:hover {
 
 /* Button Variations */
 .button {
-    display: inline-block;
+    display: block;
     padding: 1rem;
     background-color: #000000;  
     color: white;
@@ -549,6 +549,33 @@ table th, table td {
 }
 
 /* =========================================
+   Header mit Logo
+   ========================================= */
+.header-with-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+    margin-bottom: 10px;
+}
+
+.header-logo {
+    height: 60px;
+    width: auto;
+}
+
+.header-with-logo h1 {
+    margin: 0;
+    font-size: clamp(2rem, 4.5vw, 2.8rem);
+}
+
+.bank-details-container {
+    text-align: center;
+    margin: 20px 0 10px 0;
+    padding: 10px;
+}
+
+/* =========================================
    Media Queries
    ========================================= */
 /* Desktop */
@@ -586,6 +613,18 @@ table th, table td {
         font-size: 1.3rem;
         margin: 12px 0;
     }
+
+    .header-with-logo {
+        gap: 10px;
+    }
+    
+    .header-logo {
+        height: 45px;
+    }
+    
+    .header-with-logo h1 {
+        font-size: clamp(1.8rem, 4vw, 2.2rem);
+    }
     
     input, select, textarea {
         font-size: 14px;
@@ -615,6 +654,16 @@ table th, table td {
         margin: 15px 0;
     }
     
+    .button {
+        width: 100%;
+        margin: 15px auto;
+    }
+
+    .bank-details-container {
+        margin: 15px 0 5px 0;
+        padding: 5px;
+    }
+
     label {
         margin-top: 12px;
         font-size: 0.9rem;
@@ -651,6 +700,18 @@ table th, table td {
        background-size: 250%;
        background-position: center bottom;
    }
+
+    .header-with-logo {
+        gap: 8px;
+    }
+    
+    .header-logo {
+        height: 35px;
+    }
+    
+    .header-with-logo h1 {
+        font-size: clamp(1.6rem, 3.5vw, 2rem);
+    }
 
    .container {
        width: 100%;

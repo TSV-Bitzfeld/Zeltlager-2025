@@ -23,11 +23,11 @@ class Config:
     # Email
     SMTP_SERVER = "smtp.gmail.com"
     SMTP_PORT = 587
-    SMTP_USER = os.getenv('SMTP_USER', 'anmeldung.tsvbitzfeld1922@gmail.com')
-    SMTP_PASS = os.getenv('SMTP_PASS', 'hfkl vsbc dcvp cuja')
+    SMTP_USER = os.getenv('SMTP_USER')
+    SMTP_PASS = os.getenv('SMTP_PASS')
     
     # Admin
-    ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'default_admin_password')
+    ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD')
 
     # Bank Details
     BANK_NAME = os.getenv('BANK_NAME', 'Bank Name')

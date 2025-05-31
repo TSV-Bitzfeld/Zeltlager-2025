@@ -246,7 +246,7 @@ class RegistrationForm(FlaskForm):
         choices=[
             ('', 'Option auswählen'),
             ('Wir helfen beim Aufbau am Donnerstag, 17. Juli ab 18:00 Uhr.', 'Wir helfen beim Aufbau am Donnerstag, 17. Juli ab 18:00 Uhr.'),
-            ('Wir helfen beim Aufbau am Sonntag, 20. Juli ab 13:00 Uhr.', 'Wir helfen beim Aufbau am Sonntag, 20. Juli ab 13:00 Uhr.')
+            ('Wir helfen beim Abbau am Sonntag, 20. Juli ab 13:00 Uhr.', 'Wir helfen beim Abbau am Sonntag, 20. Juli ab 13:00 Uhr.')
         ],
         validators=[
             DataRequired(message="Auf-/Abbau-Option ist erforderlich")
@@ -318,59 +318,281 @@ def send_confirmation_email(app, entry_id):
     """Send confirmation email to registrant"""
     with app.app_context():
         try:
-            entry = Registration.query.get(entry_id)
+            entry = db.session.get(Registration, entry_id)
             if not entry:
                 app.logger.error(f"Registration entry {entry_id} not found")
-                return
+                return False
 
-            msg = MIMEMultipart()
+            # E-Mail konfigurieren
+            msg = MIMEMultipart('alternative')
             msg["From"] = app.config['SMTP_USER']
             msg["To"] = entry.email
-            msg["Subject"] = "Bestätigung Ihrer Anmeldung zum Zeltlager"
+            msg["Subject"] = "Ihre Anmeldung zum Zeltlager 2025"
 
-            # Load email template
-            template_path = os.path.join(app.root_path, 'templates', 'emails', 'confirmation.txt')
+            # Personen-Daten laden
             try:
-                with open(template_path, 'r', encoding='utf-8') as f:
-                    template = f.read()
-                
-                # Format template with registration data
-                email_body = template.format(
-                    **entry.to_dict(), 
-                    persons_details=format_persons_details(json.loads(entry.persons))
-                )
-            except FileNotFoundError:
-                # Fallback email template
-                email_body = f"""
-Liebe/r {entry.contact_firstname} {entry.contact_lastname},
+                persons_data = json.loads(entry.persons)
+            except (json.JSONDecodeError, TypeError):
+                persons_data = []
 
-vielen Dank für Ihre Anmeldung zum Zeltlager 2025!
+            # E-Mail-Template erstellen
+            email_body_text = create_confirmation_email_text(entry, persons_data)
+            email_body_html = create_confirmation_email_html(entry, persons_data)
 
-Ihre Anmeldedaten:
-- Kontaktperson: {entry.contact_firstname} {entry.contact_lastname}
-- E-Mail: {entry.email}
-- Telefon: {entry.phone_number}
-- Kuchenspende: {entry.cake_donation}
-- Auf-/Abbau: {entry.help_organisation}
-
-Angemeldete Kinder:
-{format_persons_details(json.loads(entry.persons))}
-
-Mit freundlichen Grüßen
-Ihr Zeltlager-Team
-                """
+            # Text- und HTML-Versionen hinzufügen
+            part1 = MIMEText(email_body_text, 'plain', 'utf-8')
+            part2 = MIMEText(email_body_html, 'html', 'utf-8')
             
-            msg.attach(MIMEText(email_body, "plain"))
+            msg.attach(part1)
+            msg.attach(part2)
 
+            # E-Mail versenden
             with smtplib.SMTP(app.config['SMTP_SERVER'], app.config['SMTP_PORT']) as server:
                 server.starttls()
                 server.login(app.config['SMTP_USER'], app.config['SMTP_PASS'])
                 server.send_message(msg)
 
-            app.logger.info(f"Confirmation email sent to {entry.email}")
+            app.logger.info(f"Confirmation email sent successfully to {entry.email}")
+            return True
 
         except Exception as e:
             app.logger.error(f"Failed to send confirmation email for entry {entry_id}: {str(e)}")
+            return False
+
+def create_confirmation_email_text(entry, persons_data):
+    """Create text version of confirmation email"""
+    
+    # Kinder-Details formatieren
+    children_details = []
+    for i, person in enumerate(persons_data, 1):
+        children_details.append(
+            f"  Kind {i}: {person.get('person_firstname', '')} {person.get('person_lastname', '')}\n"
+            f"          Geburtsdatum: {person.get('birthdate', '')}\n"
+            f"          Verein: {person.get('club_membership', '')}"
+        )
+    
+    children_text = "\n".join(children_details)
+    child_count = len(persons_data)
+    
+    # Zahlungsbetrag berechnen
+    total_amount = child_count * 50
+    
+    return f"""Liebe/r {entry.contact_firstname} {entry.contact_lastname},
+
+vielen Dank für Ihre Anmeldung zum Zeltlager 2025 "Farm Fieber"!
+
+═══════════════════════════════════════════════════
+📋 IHRE ANMELDEDATEN IM ÜBERBLICK
+═══════════════════════════════════════════════════
+
+👤 KONTAKTPERSON:
+   {entry.contact_firstname} {entry.contact_lastname}
+   Geburtsdatum: {entry.contact_birthdate}
+   E-Mail: {entry.email}
+   Telefon: {entry.phone_number}
+
+👶 ANGEMELDETE KINDER ({child_count} {'Kind' if child_count == 1 else 'Kinder'}):
+{children_text}
+
+🍰 KUCHENSPENDE:
+   {entry.cake_donation}
+
+🔨 AUF-/ABBAU:
+   {entry.help_organisation}
+
+💰 ZAHLUNGSINFORMATIONEN:
+   Betrag: {total_amount},00 € ({child_count} {'Kind' if child_count == 1 else 'Kinder'} x 50,00 €)
+   Zahlungsfrist: 30. Juni 2025
+   
+   Bankdaten:
+   Empfänger: {app.config.get('RECIPIENT_NAME', 'TSV Bitzfeld 1922 e.V.')}
+   IBAN: {app.config.get('BANK_IBAN', 'DE89 6225 0030 0005 0447 68')}
+   BIC: {app.config.get('BANK_BIC', 'SOLADES1HLB')}
+   Verwendungszweck: Zeltlager-{entry.contact_firstname} {entry.contact_lastname}
+
+═══════════════════════════════════════════════════
+📝 WICHTIGE NÄCHSTE SCHRITTE
+═══════════════════════════════════════════════════
+
+1️⃣ ZAHLUNG bis 30. Juni 2025 überweisen
+
+2️⃣ FORMULARE herunterladen und ausfüllen:
+   → Gesundheitsbogen
+   → Einverständniserklärung
+   
+   Download unter: https://[IHRE-DOMAIN]/static/forms/gesundheitsbogen-und-einverstaendniserklaerung.pdf
+   
+   ⚠️ Wichtig: Bitte für {'jedes Kind ein separates Formular' if child_count > 1 else 'das Kind ein Formular'} ausfüllen!
+
+3️⃣ FORMULARE mitbringen zum Zeltlager-Start:
+   📅 Freitag, 18. Juli 2025 um 16:00 Uhr
+   📍 Sportplatz in Schwabbach
+
+═══════════════════════════════════════════════════
+📅 ZELTLAGER-PROGRAMM "FARM FIEBER"
+═══════════════════════════════════════════════════
+
+🕐 Freitag, 18. Juli 2025 ab 16:00 Uhr
+   → Start des Zeltlagers
+   → Bitte Formulare mitbringen!
+
+🕐 Samstag, 19. Juli 2025
+   → Tagesausflug nach Braunsbach (Bauernhof)
+
+🕐 Sonntag, 20. Juli 2025 ab 14:00 Uhr
+   → Kaffee und Kuchen für Eltern
+   → Fußballspiel "Klein gegen Groß"
+   → Ende des Zeltlagers
+
+═══════════════════════════════════════════════════
+❓ FRAGEN ODER PROBLEME?
+═══════════════════════════════════════════════════
+
+Kontaktieren Sie uns gerne:
+📧 anmeldung.tsvbitzfeld1922@gmail.com
+📞 Lena Weihbrecht: 0173/8909378
+
+═══════════════════════════════════════════════════
+
+Wir freuen uns riesig auf drei tolle Tage mit {'Ihrem Kind' if child_count == 1 else 'Ihren Kindern'} beim Zeltlager 2025! 🏕️🚜
+
+Mit freundlichen Grüßen
+Ihr Zeltlager-Team
+TSV Bitzfeld 1922 e.V. & TSV Schwabbach 1947 e.V.
+
+═══════════════════════════════════════════════════
+Diese E-Mail wurde automatisch generiert.
+Anmeldezeitpunkt: {entry.created_at.astimezone(pytz.timezone("Europe/Berlin")).strftime("%d.%m.%Y um %H:%M Uhr")}
+"""
+
+def create_confirmation_email_html(entry, persons_data):
+    """Create HTML version of confirmation email"""
+    
+    # Kinder-Details formatieren
+    children_html = ""
+    for i, person in enumerate(persons_data, 1):
+        children_html += f"""
+        <tr style="border-bottom: 1px solid #eee;">
+            <td style="padding: 8px; font-weight: bold;">Kind {i}:</td>
+            <td style="padding: 8px;">{person.get('person_firstname', '')} {person.get('person_lastname', '')}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px; padding-left: 20px; color: #666;">Geburtsdatum:</td>
+            <td style="padding: 8px; color: #666;">{person.get('birthdate', '')}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px; padding-left: 20px; color: #666;">Verein:</td>
+            <td style="padding: 8px; color: #666;">{person.get('club_membership', '')}</td>
+        </tr>
+        """
+    
+    child_count = len(persons_data)
+    total_amount = child_count * 50
+    
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Bestätigung Zeltlager 2025</title>
+    </head>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+     
+        <p style="font-size: 16px;">Liebe/r {entry.contact_firstname} {entry.contact_lastname},</p>
+        
+        <p>vielen Dank für Ihre Anmeldung zum <strong>Zeltlager 2025</strong>! Wir haben Ihre Anmeldung erfolgreich erhalten.</p>
+
+        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h2 style="color: #2c3e50; margin-top: 0;">📋 Ihre Anmeldedaten im Überblick</h2>
+            
+            <h3 style="color: #34495e; border-bottom: 2px solid #3498db; padding-bottom: 5px;">👤 Kontaktperson</h3>
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr><td style="padding: 5px; font-weight: bold;">Name:</td><td style="padding: 5px;">{entry.contact_firstname} {entry.contact_lastname}</td></tr>
+                <tr><td style="padding: 5px; font-weight: bold;">Geburtsdatum:</td><td style="padding: 5px;">{entry.contact_birthdate}</td></tr>
+                <tr><td style="padding: 5px; font-weight: bold;">E-Mail:</td><td style="padding: 5px;">{entry.email}</td></tr>
+                <tr><td style="padding: 5px; font-weight: bold;">Telefon:</td><td style="padding: 5px;">{entry.phone_number}</td></tr>
+            </table>
+
+            <h3 style="color: #34495e; border-bottom: 2px solid #3498db; padding-bottom: 5px; margin-top: 25px;">👶 Angemeldete Kinder ({child_count} {'Kind' if child_count == 1 else 'Kinder'})</h3>
+            <table style="width: 100%; border-collapse: collapse;">
+                {children_html}
+            </table>
+
+            <h3 style="color: #34495e; border-bottom: 2px solid #3498db; padding-bottom: 5px; margin-top: 25px;">🍰 Weitere Angaben</h3>
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr><td style="padding: 5px; font-weight: bold;">Kuchenspende:</td><td style="padding: 5px;">{entry.cake_donation}</td></tr>
+                <tr><td style="padding: 5px; font-weight: bold;">Auf-/Abbau:</td><td style="padding: 5px;">{entry.help_organisation}</td></tr>
+            </table>
+        </div>
+
+        <div style="background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 8px; padding: 20px; margin: 20px 0;">
+            <h2 style="color: #856404; margin-top: 0;">💰 Zahlungsinformationen</h2>
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr><td style="padding: 5px; font-weight: bold; color: #856404;">Betrag:</td><td style="padding: 5px; color: #856404; font-weight: bold;">{total_amount},00 €</td></tr>
+                <tr><td style="padding: 5px; color: #856404;"></td><td style="padding: 5px; color: #856404; font-size: 14px;">({child_count} {'Kind' if child_count == 1 else 'Kinder'} x 50,00 €)</td></tr>
+                <tr><td style="padding: 5px; font-weight: bold; color: #856404;">Zahlungsfrist:</td><td style="padding: 5px; color: #856404; font-weight: bold;">30. Juni 2025</td></tr>
+            </table>
+            
+            <h3 style="color: #856404; background: #fff3cd; margin-top: 20px; margin-bottom: 10px;">Bankdaten:</h3>
+            <table style="width: 100%; border-collapse: collapse; color: #856404; background: #fff3cd; border-radius: 5px; padding: 10px;">
+                <tr><td style="padding: 5px; font-weight: bold;">Empfänger:</td><td style="padding: 5px;">{app.config.get('RECIPIENT_NAME', 'TSV Bitzfeld 1922 e.V.')}</td></tr>
+                <tr><td style="padding: 5px; font-weight: bold;">IBAN:</td><td style="padding: 5px;">{app.config.get('BANK_IBAN', 'DE89 6225 0030 0005 0447 68')}</td></tr>
+                <tr><td style="padding: 5px; font-weight: bold;">BIC:</td><td style="padding: 5px;">{app.config.get('BANK_BIC', 'SOLADES1HLB')}</td></tr>
+                <tr><td style="padding: 5px; font-weight: bold;">VZ:</td><td style="padding: 5px;">Zeltlager-{entry.contact_firstname} {entry.contact_lastname}</td></tr>
+            </table>
+        </div>
+
+        <div style="background: #d4edda; border: 1px solid #c3e6cb; border-radius: 8px; padding: 20px; margin: 20px 0;">
+            <h2 style="color: #155724; margin-top: 0;">📝 Wichtige nächste Schritte</h2>
+            <ol style="color: #155724; margin: 10px 0;">
+                <li style="margin: 10px 0;"><strong>Zahlung überweisen</strong> bis 30. Juni 2025</li>
+                <li style="margin: 10px 0;"><strong>Formulare herunterladen, ausdrucken und ausfüllen</strong>
+                </li>
+                <li style="margin: 10px 0;"><strong>Formulare mitbringen</strong> zum Zeltlager-Start am <strong>Freitag, 18. Juli 2025 um 16:00 Uhr</strong></li>
+            </ol>
+        </div>
+
+        <div style="background: #e3f2fd; border: 1px solid #bbdefb; border-radius: 8px; padding: 20px; margin: 20px 0;">
+            <h2 style="color: #1565c0; margin-top: 0;">📅 Zeltlager-Programm Farm Fieber</h2>
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                    <td style="padding: 10px; font-weight: bold; color: #1565c0;">🕐 Freitag, 18. Juli 2025</td>
+                    <td style="padding: 10px;">ab 16:00 Uhr - Start des Zeltlagers<br><small>📍 Sportplatz in Schwabbach</small></td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; font-weight: bold; color: #1565c0;">🕐 Samstag, 19. Juli 2025</td>
+                    <td style="padding: 10px;">Tagesausflug nach Braunsbach (Bauernhof)</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; font-weight: bold; color: #1565c0;">🕐 Sonntag, 20. Juli 2025</td>
+                    <td style="padding: 10px;">ab 14:00 Uhr - Kaffee und Kuchen für Eltern<br>Fußballspiel "Klein gegen Groß"</td>
+                </tr>
+            </table>
+        </div>
+
+        <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 15px; margin: 20px 0;">
+            <h3 style="color: #495057; margin-top: 0;">❓ Fragen oder Probleme</h3>
+            <p style="margin: 5px 0;">📧 <a href="mailto:anmeldung.tsvbitzfeld1922@gmail.com" style="color: #007bff;">anmeldung.tsvbitzfeld1922@gmail.com</a></p>
+            <p style="margin: 5px 0;">📞 Lena Weihbrecht: <a href="tel:+4917389093788" style="color: #007bff;">0173/8909378</a></p>
+        </div>
+
+        <div style="text-align: center; margin: 30px 0;">
+            <p style="font-size: 16px; color: #333;">Wir freuen uns riesig auf drei tolle Tage mit {'Ihrem Kind' if child_count == 1 else 'Ihren Kindern'} beim Zeltlager 2025! 🏕️🚜</p>
+        </div>
+
+        <div style="border-top: 2px solid #dee2e6; padding-top: 20px; text-align: center; color: #6c757d; font-size: 14px;">
+            <p style="margin: 5px 0;"><strong>Mit freundlichen Grüßen</strong></p>
+            <p style="margin: 5px 0;">Ihr Zeltlager-Team</p>
+            <p style="margin: 5px 0;">TSV Bitzfeld 1922 e.V. & TSV Schwabbach 1947 e.V.</p>
+            <hr style="margin: 15px 0; border: none; border-top: 1px solid #dee2e6;">
+            <p style="margin: 5px 0; font-size: 12px;">Diese E-Mail wurde automatisch generiert.</p>
+            <p style="margin: 5px 0; font-size: 12px;">Anmeldezeitpunkt: {entry.created_at.astimezone(pytz.timezone("Europe/Berlin")).strftime("%d.%m.%Y um %H:%M Uhr")}</p>
+        </div>
+
+    </body>
+    </html>
+    """
 
 def sanitize_input(value):
     """Sanitize user input to prevent XSS and other injection attacks"""
@@ -418,14 +640,35 @@ def register():
     """Handle registration form"""
     if request.method == "POST":
         # Prüfen ob es ein AJAX-Request ist (JSON-Daten)
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.content_type == 'application/json':
             try:
                 data = request.get_json(force=True)
                 app.logger.info("Received registration data")
 
+                # CSRF-Token aus den Daten extrahieren und validieren
+                csrf_token = data.get('csrf_token')
+                if not csrf_token:
+                    app.logger.error("No CSRF token in request")
+                    return jsonify({
+                        "success": False,
+                        "error": "CSRF-Token fehlt. Bitte laden Sie die Seite neu."
+                    }), 400
+
+                # CSRF-Token validieren
+                try:
+                    from flask_wtf.csrf import validate_csrf
+                    validate_csrf(csrf_token)
+                except Exception as csrf_error:
+                    app.logger.error(f"CSRF validation failed: {str(csrf_error)}")
+                    return jsonify({
+                        "success": False,
+                        "error": "CSRF-Token ist ungültig. Bitte laden Sie die Seite neu."
+                    }), 400
+
                 # Validate data (OHNE WTForms, da wir JSON bekommen)
                 is_valid, error_message = validate_registration_data(data)
                 if not is_valid:
+                    app.logger.error(f"Validation failed: {error_message}")
                     return jsonify({
                         "success": False,
                         "error": error_message
@@ -448,22 +691,42 @@ def register():
                 app.logger.info(f"Registration data stored in session for {sanitized_data['email']}")
 
                 # Convert persons list to JSON string before creating database entry
-                sanitized_data['persons'] = json.dumps(sanitized_data['persons'])
+                db_data = sanitized_data.copy()
+                db_data['persons'] = json.dumps(sanitized_data['persons'])
 
                 # Create database entry
-                registration = Registration(**sanitized_data)
+                registration = Registration(**db_data)
                 db.session.add(registration)
                 if not safe_commit():
+                    app.logger.error("Database commit failed")
                     return jsonify({
                         "success": False,
                         "error": "Datenbankfehler. Bitte versuchen Sie es erneut."
                     }), 500
 
+                # E-Mail sofort senden (synchron, nicht in Thread wegen Session-Problemen)
+                email_sent = send_confirmation_email(app, registration.id)
+                if not email_sent:
+                    app.logger.warning(f"Failed to send confirmation email for registration {registration.id}")
+                    # Trotzdem erfolgreich, aber mit Warnung
+                    return jsonify({
+                        "success": True,
+                        "redirect": url_for("confirmation"),
+                        "warning": "Anmeldung erfolgreich, aber E-Mail konnte nicht versendet werden."
+                    })
+
+                app.logger.info(f"Registration {registration.id} completed successfully with email confirmation")
                 return jsonify({
                     "success": True,
                     "redirect": url_for("confirmation")
                 })
 
+            except json.JSONDecodeError as e:
+                app.logger.error(f"Invalid JSON in request: {str(e)}")
+                return jsonify({
+                    "success": False,
+                    "error": "Ungültige Datenformat. Bitte versuchen Sie es erneut."
+                }), 400
             except Exception as e:
                 app.logger.error(f"Registration error: {str(e)}")
                 return jsonify({
@@ -557,12 +820,32 @@ def admin():
         timezone = pytz.timezone("Europe/Berlin")
         total_children = 0
         
+        # Neue Statistik-Zähler
+        cake_friday_count = 0
+        cake_sunday_count = 0
+        help_thursday_count = 0
+        help_sunday_count = 0
+        
         for reg in registrations:
             try:
                 persons_data = json.loads(reg.persons)
                 
                 # Zähle alle angemeldeten Kinder
                 total_children += len(persons_data)
+                
+                # Zähle Kuchenspenden
+                cake_text = reg.cake_donation.lower()
+                if 'freitag' in cake_text:
+                    cake_friday_count += 1
+                elif 'sonntag' in cake_text:
+                    cake_sunday_count += 1
+                
+                # Zähle Helfer
+                help_text = reg.help_organisation.lower()
+                if 'donnerstag' in help_text and 'aufbau' in help_text:
+                    help_thursday_count += 1
+                elif 'sonntag' in help_text and 'abbau' in help_text:
+                    help_sunday_count += 1
                 
                 reg_dict = {
                     'id': reg.id,
@@ -583,10 +866,14 @@ def admin():
                 app.logger.error(f"Error processing registration {reg.id}: {str(person_error)}")
                 app.logger.error(f"Problematic persons data: {reg.persons}")
 
+        # Neue Statistiken
         stats = {
             'total_registrations': len(registrations),
-            'confirmed_registrations': sum(1 for r in registrations if r.confirmed),
-            'total_children': total_children
+            'total_children': total_children,
+            'cake_friday_count': cake_friday_count,
+            'cake_sunday_count': cake_sunday_count,
+            'help_thursday_count': help_thursday_count,
+            'help_sunday_count': help_sunday_count
         }
 
         app.logger.info(f"Admin dashboard stats: {stats}")
@@ -604,39 +891,103 @@ def admin():
         flash("Fehler beim Laden der Daten.", "danger")
         return redirect(url_for("admin_login"))
 
-@app.route("/confirm-mail/<int:entry_id>", methods=["POST"])
+@app.route("/edit-entry/<int:entry_id>", methods=["GET", "POST"])
 @admin_required
-def confirm_mail(entry_id: int):
-    """Send confirmation email"""
+def edit_entry(entry_id: int):
+    """Edit registration entry"""
     try:
-        entry = db.session.get(Registration, entry_id)
-        if not entry:
+        registration = db.session.get(Registration, entry_id)
+        if not registration:
             flash("Eintrag nicht gefunden.", "danger")
             return redirect(url_for("admin"))
 
-        if entry.confirmed:
-            flash("Bestätigungsmail wurde bereits versendet.", "warning")
-            return redirect(url_for("admin"))
+        if request.method == "GET":
+            # Lade Daten für Bearbeitungsformular
+            try:
+                persons_data = json.loads(registration.persons)
+            except (json.JSONDecodeError, TypeError):
+                persons_data = []
+            
+            edit_data = {
+                'id': registration.id,
+                'contact_firstname': registration.contact_firstname,
+                'contact_lastname': registration.contact_lastname,
+                'contact_birthdate': registration.contact_birthdate,
+                'phone_number': registration.phone_number,
+                'email': registration.email,
+                'cake_donation': registration.cake_donation,
+                'help_organisation': registration.help_organisation,
+                'persons': persons_data
+            }
+            
+            return render_template(
+                "edit_form.html", 
+                data=edit_data,
+                csrf_token=generate_csrf(),
+                csp_nonce=CSP_NONCE
+            )
 
-        entry.confirmed = True
-        if not safe_commit():
-            flash("Fehler beim Speichern der Bestätigung.", "danger")
-            return redirect(url_for("admin"))
+        elif request.method == "POST":
+            # Verarbeite Formular-Daten (JSON oder normale Form)
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                # AJAX-Request mit JSON-Daten
+                try:
+                    data = request.get_json(force=True)
+                    
+                    # Validiere Daten
+                    is_valid, error_message = validate_registration_data(data)
+                    if not is_valid:
+                        return jsonify({
+                            "success": False,
+                            "error": error_message
+                        }), 400
 
-        # Send email in background thread
-        threading.Thread(
-            target=send_confirmation_email,
-            args=(app, entry_id),
-            daemon=True
-        ).start()
+                    # Sanitize Daten
+                    sanitized_data = {
+                        "contact_firstname": sanitize_input(data["contact_firstname"]),
+                        "contact_lastname": sanitize_input(data["contact_lastname"]),
+                        "contact_birthdate": sanitize_input(data["contact_birthdate"]),
+                        "phone_number": sanitize_input(data["phone_number"]),
+                        "email": sanitize_input(data["email"].lower()),
+                        "cake_donation": sanitize_input(data["cake_donation"]),
+                        "help_organisation": sanitize_input(data["help_organisation"]),
+                        "persons": json.dumps(data["persons"])
+                    }
 
-        flash("Bestätigungsmail wurde erfolgreich versandt.", "success")
+                    # Update Registration
+                    for key, value in sanitized_data.items():
+                        setattr(registration, key, value)
+
+                    if not safe_commit():
+                        return jsonify({
+                            "success": False,
+                            "error": "Datenbankfehler. Bitte versuchen Sie es erneut."
+                        }), 500
+
+                    app.logger.info(f"Registration {entry_id} updated successfully")
+                    
+                    return jsonify({
+                        "success": True,
+                        "message": "Eintrag erfolgreich bearbeitet!",
+                        "redirect": url_for("admin")
+                    })
+
+                except Exception as e:
+                    app.logger.error(f"Error updating registration {entry_id}: {str(e)}")
+                    return jsonify({
+                        "success": False,
+                        "error": "Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut."
+                    }), 500
+            
+            else:
+                # Fallback für normale Form-Submissions
+                flash("Formular-Upload wird nicht unterstützt. Bitte verwenden Sie das JavaScript-Interface.", "danger")
+                return redirect(url_for("edit_entry", entry_id=entry_id))
 
     except Exception as e:
-        app.logger.error(f"Error confirming registration {entry_id}: {str(e)}")
-        flash("Fehler beim Senden der Bestätigungsmail.", "danger")
-
-    return redirect(url_for("admin"))
+        app.logger.error(f"Error in edit_entry for ID {entry_id}: {str(e)}")
+        flash("Fehler beim Bearbeiten des Eintrags.", "danger")
+        return redirect(url_for("admin"))
 
 @app.route("/delete-entry/<int:entry_id>", methods=["POST"])
 @admin_required
@@ -696,47 +1047,71 @@ def export_excel():
             return redirect(url_for("admin"))
         
         # Zwei separate Datensätze anlegen
-        participants_data = []  # Für angemeldete Personen
-        companions_data = []    # Für Begleitpersonen
+        participants_data = []  # Für angemeldete Personen (Kinder)
+        companions_data = []    # Für Kontaktpersonen
         
         # Referenzdatum für Altersberechnung
         reference_date = datetime.now()
         date_str = reference_date.strftime("%d.%m.%Y")
         
+        # Statistik-Zähler
+        cake_friday_count = 0
+        cake_sunday_count = 0
+        help_thursday_count = 0
+        help_sunday_count = 0
+        
         for reg in registrations:
-            # Daten für Begleitperson/Kontaktperson
-            companion_age = calculate_age(reg.contact_birthdate, reference_date) if reg.contact_birthdate else None
-            age_group = "Erwachsener (ab 18)" if companion_age and companion_age >= 18 else "Kind/Jugendl. (bis 17)"
+            # Daten für Kontaktperson
+            contact_age = calculate_age(reg.contact_birthdate, reference_date) if reg.contact_birthdate else None
+            contact_age_group = "Erwachsener (ab 18)" if contact_age and contact_age >= 18 else "Kind/Jugendl. (bis 17)"
+            
+            # Statistiken zählen
+            cake_text = reg.cake_donation.lower()
+            if 'freitag' in cake_text:
+                cake_friday_count += 1
+            elif 'sonntag' in cake_text:
+                cake_sunday_count += 1
+            
+            help_text = reg.help_organisation.lower()
+            if 'donnerstag' in help_text and 'aufbau' in help_text:
+                help_thursday_count += 1
+            elif 'sonntag' in help_text and 'abbau' in help_text:
+                help_sunday_count += 1
             
             companions_data.append({
+                "Anmeldungs-ID": reg.id,
                 "Vorname": reg.contact_firstname,
                 "Nachname": reg.contact_lastname,
-                "Geburtsdatum": reg.contact_birthdate,
-                f"Alter am {date_str}": companion_age if companion_age is not None else "Unbekannt",
-                "Altersgruppe": age_group,
+                "Geburtsdatum": reg.contact_birthdate if reg.contact_birthdate else "Nicht angegeben",
+                f"Alter am {date_str}": contact_age if contact_age is not None else "Unbekannt",
+                "Altersgruppe": contact_age_group,
                 "Telefon": reg.phone_number,
                 "E-Mail": reg.email,
                 "Kuchenspende": reg.cake_donation,
                 "Auf-/Abbau": reg.help_organisation,
+                "Anzahl angemeldete Kinder": len(json.loads(reg.persons)) if reg.persons else 0,
                 "Anmeldung bestätigt": "Ja" if reg.confirmed else "Nein",
                 "Anmeldezeitpunkt": reg.created_at.astimezone(pytz.timezone("Europe/Berlin")).strftime("%d.%m.%Y %H:%M")
             })
             
-            # Daten für angemeldete Personen (Kinder)
+            # Daten für angemeldete Kinder
             try:
                 persons = json.loads(reg.persons)
                 for person in persons:
                     person_age = calculate_age(person.get('birthdate'), reference_date)
-                    age_group = "Erwachsener (ab 18)" if person_age and person_age >= 18 else "Kind/Jugendl. (bis 17)"
+                    person_age_group = "Kind/Jugendl. (bis 17)" if person_age and person_age < 18 else "Erwachsener (ab 18)"
                     
                     participants_data.append({
+                        "Anmeldungs-ID": reg.id,
                         "Vorname": person.get('person_firstname', ''),
                         "Nachname": person.get('person_lastname', ''),
                         "Geburtsdatum": person.get('birthdate', ''),
                         f"Alter am {date_str}": person_age if person_age is not None else "Unbekannt",
-                        "Altersgruppe": age_group,
+                        "Altersgruppe": person_age_group,
                         "Vereinsmitgliedschaft": person.get('club_membership', ''),
                         "Kontaktperson": f"{reg.contact_firstname} {reg.contact_lastname}",
+                        "Kontakt E-Mail": reg.email,
+                        "Kontakt Telefon": reg.phone_number,
                         "Anmeldung bestätigt": "Ja" if reg.confirmed else "Nein",
                         "Anmeldezeitpunkt": reg.created_at.astimezone(pytz.timezone("Europe/Berlin")).strftime("%d.%m.%Y %H:%M")
                     })
@@ -744,80 +1119,100 @@ def export_excel():
                 app.logger.error(f"Error parsing persons data for registration {reg.id}: {e}")
 
         # Statistiken berechnen
-        total_adults = sum(1 for p in participants_data if p["Altersgruppe"] == "Erwachsener (ab 18)")
-        total_adults += sum(1 for c in companions_data if c["Altersgruppe"] == "Erwachsener (ab 18)")
+        total_adults_participants = sum(1 for p in participants_data if p["Altersgruppe"] == "Erwachsener (ab 18)")
+        total_adults_contacts = sum(1 for c in companions_data if c["Altersgruppe"] == "Erwachsener (ab 18)")
+        total_adults = total_adults_participants + total_adults_contacts
         
-        total_children = sum(1 for p in participants_data if p["Altersgruppe"] == "Kind/Jugendl. (bis 17)")
-        total_children += sum(1 for c in companions_data if c["Altersgruppe"] == "Kind/Jugendl. (bis 17)")
+        total_children_participants = sum(1 for p in participants_data if p["Altersgruppe"] == "Kind/Jugendl. (bis 17)")
+        total_children_contacts = sum(1 for c in companions_data if c["Altersgruppe"] == "Kind/Jugendl. (bis 17)")
+        total_children = total_children_participants + total_children_contacts
+        
+        confirmed_registrations = sum(1 for c in companions_data if c["Anmeldung bestätigt"] == "Ja")
         
         # DataFrames erstellen
         participants_df = pd.DataFrame(participants_data) if participants_data else pd.DataFrame()
         companions_df = pd.DataFrame(companions_data) if companions_data else pd.DataFrame()
         
-        # Statistik-DataFrame erstellen
+        # Erweiterte Statistik-DataFrame erstellen
         stats_data = [
             ["Gesamt Anmeldungen", len(companions_data)],
-            ["Bestätigte Anmeldungen", sum(1 for c in companions_data if c["Anmeldung bestätigt"] == "Ja")],
-            ["Anzahl angemeldete Kinder", len(participants_data)],
-            ["Anzahl Erwachsene", total_adults],
-            ["Anzahl Kinder/Jugendliche", total_children]
+            ["Bestätigte Anmeldungen", confirmed_registrations],
+            ["Nicht bestätigte Anmeldungen", len(companions_data) - confirmed_registrations],
+            ["", ""],  # Leerzeile
+            ["Anzahl angemeldete Kinder (Teilnehmer)", len(participants_data)],
+            ["Anzahl Kontaktpersonen", len(companions_data)],
+            ["", ""],  # Leerzeile
+            ["Gesamt Erwachsene (ab 18)", total_adults],
+            ["Gesamt Kinder/Jugendliche (bis 17)", total_children],
+            ["", ""],  # Leerzeile
+            ["Kuchenspenden Freitag", cake_friday_count],
+            ["Kuchenspenden Sonntag", cake_sunday_count],
+            ["", ""],  # Leerzeile
+            ["Helfer Aufbau Donnerstag", help_thursday_count],
+            ["Helfer Abbau Sonntag", help_sunday_count],
+            ["", ""],  # Leerzeile
+            ["Export erstellt am", datetime.now(pytz.timezone("Europe/Berlin")).strftime("%d.%m.%Y %H:%M")]
         ]
         stats_df = pd.DataFrame(stats_data, columns=["Statistik", "Anzahl"])
 
         # Excel-Datei erstellen
         output = BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            # Sheet für angemeldete Kinder
-            participants_df.to_excel(writer, index=False, sheet_name='Angemeldete Kinder')
-            participants_sheet = writer.sheets['Angemeldete Kinder']
-            
-            # Spaltenbreiten anpassen
-            for idx, col in enumerate(participants_df.columns):
-                max_length = max(
-                    participants_df[col].astype(str).apply(len).max() if not participants_df.empty else 10,
-                    len(col)
-                ) + 2
-                participants_sheet.column_dimensions[chr(65 + idx)].width = min(max_length, 30)
-            
-            # Sheet für Begleitpersonen
-            companions_df.to_excel(writer, index=False, sheet_name='Kontaktpersonen')
-            companions_sheet = writer.sheets['Kontaktpersonen']
-            
-            # Spaltenbreiten anpassen
-            for idx, col in enumerate(companions_df.columns):
-                max_length = max(
-                    companions_df[col].astype(str).apply(len).max() if not companions_df.empty else 10,
-                    len(col)
-                ) + 2
-                companions_sheet.column_dimensions[chr(65 + idx)].width = min(max_length, 30)
-            
-            # Statistik-Sheet
+            # Sheet für Statistiken (zuerst)
             stats_df.to_excel(writer, index=False, sheet_name='Statistik')
             stats_sheet = writer.sheets['Statistik']
             
             # Spaltenbreiten für Statistik anpassen
-            for idx, col in enumerate(stats_df.columns):
-                stats_sheet.column_dimensions[chr(65 + idx)].width = 25
+            stats_sheet.column_dimensions['A'].width = 35
+            stats_sheet.column_dimensions['B'].width = 20
+            
+            # Sheet für angemeldete Kinder
+            if not participants_df.empty:
+                participants_df.to_excel(writer, index=False, sheet_name='Angemeldete Kinder')
+                participants_sheet = writer.sheets['Angemeldete Kinder']
+                
+                # Spaltenbreiten anpassen
+                for idx, col in enumerate(participants_df.columns):
+                    max_length = max(
+                        participants_df[col].astype(str).apply(len).max(),
+                        len(col)
+                    ) + 2
+                    col_letter = chr(65 + idx) if idx < 26 else chr(65 + idx // 26 - 1) + chr(65 + idx % 26)
+                    participants_sheet.column_dimensions[col_letter].width = min(max_length, 30)
+            
+            # Sheet für Kontaktpersonen
+            if not companions_df.empty:
+                companions_df.to_excel(writer, index=False, sheet_name='Kontaktpersonen')
+                companions_sheet = writer.sheets['Kontaktpersonen']
+                
+                # Spaltenbreiten anpassen
+                for idx, col in enumerate(companions_df.columns):
+                    max_length = max(
+                        companions_df[col].astype(str).apply(len).max(),
+                        len(col)
+                    ) + 2
+                    col_letter = chr(65 + idx) if idx < 26 else chr(65 + idx // 26 - 1) + chr(65 + idx % 26)
+                    companions_sheet.column_dimensions[col_letter].width = min(max_length, 30)
 
         output.seek(0)
         
         # Dateiname mit Zeitstempel erstellen
         timestamp = datetime.now(pytz.timezone("Europe/Berlin"))\
-            .strftime("%d-%m-%Y_%H-%M-%S")
+            .strftime("%d-%m-%Y_%H-%M")
         
         # Response mit Excel-Datei senden
         response = Response(
             output.getvalue(),
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={
-                "Content-Disposition": f"attachment; filename=Anmeldungen_Stand-{timestamp}.xlsx",
+                "Content-Disposition": f"attachment; filename=Zeltlager_Anmeldungen_{timestamp}.xlsx",
                 "Cache-Control": "no-cache, no-store, must-revalidate",
                 "Pragma": "no-cache",
                 "Expires": "0"
             }
         )
         
-        app.logger.info("Excel export generated successfully")
+        app.logger.info(f"Excel export generated successfully with {len(participants_data)} children and {len(companions_data)} contacts")
         return response
 
     except Exception as e:
@@ -859,12 +1254,16 @@ def internal_server_error(e):
 @app.errorhandler(CSRFError)
 def handle_csrf_error(e):
     """Handle CSRF errors"""
-    app.logger.error(f"CSRF Error: {request.url}")
-    if request.is_json:
+    app.logger.error(f"CSRF Error: {request.url} - {str(e)}")
+    
+    # Für AJAX-Requests JSON zurückgeben
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.content_type == 'application/json':
         return jsonify({
             "success": False,
             "error": "CSRF-Token ist ungültig oder fehlt. Bitte laden Sie die Seite neu."
         }), 400
+    
+    # Für normale Requests Flash-Message und Redirect
     flash("CSRF-Token ist ungültig oder fehlt. Bitte versuchen Sie es erneut.", "danger")
     return redirect(url_for("register"))
 
