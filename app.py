@@ -417,62 +417,70 @@ def calculate_age(birth_date_str, reference_date=None):
 def register():
     """Handle registration form"""
     if request.method == "POST":
-        form = RegistrationForm()
+        # Prüfen ob es ein AJAX-Request ist (JSON-Daten)
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            if not form.validate(): 
-                return jsonify({'errors': form.errors}), 400
-        try:
-            data = request.get_json(force=True)
-            app.logger.info("Received registration data")
+            try:
+                data = request.get_json(force=True)
+                app.logger.info("Received registration data")
 
-            # Validate data
-            is_valid, error_message = validate_registration_data(data)
-            if not is_valid:
+                # Validate data (OHNE WTForms, da wir JSON bekommen)
+                is_valid, error_message = validate_registration_data(data)
+                if not is_valid:
+                    return jsonify({
+                        "success": False,
+                        "error": error_message
+                    }), 400
+
+                # Sanitize and store data
+                sanitized_data = {
+                    "persons": data["persons"],
+                    "contact_firstname": sanitize_input(data["contact_firstname"]),
+                    "contact_lastname": sanitize_input(data["contact_lastname"]),
+                    "contact_birthdate": sanitize_input(data["contact_birthdate"]),
+                    "phone_number": sanitize_input(data["phone_number"]),
+                    "email": sanitize_input(data["email"].lower()),
+                    "cake_donation": sanitize_input(data["cake_donation"]),
+                    "help_organisation": sanitize_input(data["help_organisation"])
+                }
+
+                # Store in session
+                session["registration_data"] = sanitized_data
+                app.logger.info(f"Registration data stored in session for {sanitized_data['email']}")
+
+                # Convert persons list to JSON string before creating database entry
+                sanitized_data['persons'] = json.dumps(sanitized_data['persons'])
+
+                # Create database entry
+                registration = Registration(**sanitized_data)
+                db.session.add(registration)
+                if not safe_commit():
+                    return jsonify({
+                        "success": False,
+                        "error": "Datenbankfehler. Bitte versuchen Sie es erneut."
+                    }), 500
+
+                return jsonify({
+                    "success": True,
+                    "redirect": url_for("confirmation")
+                })
+
+            except Exception as e:
+                app.logger.error(f"Registration error: {str(e)}")
                 return jsonify({
                     "success": False,
-                    "error": error_message
-                }), 400
-
-            # Sanitize and store data
-            sanitized_data = {
-                "persons": data["persons"],
-                "contact_firstname": sanitize_input(data["contact_firstname"]),
-                "contact_lastname": sanitize_input(data["contact_lastname"]),
-                "contact_birthdate": sanitize_input(data["contact_birthdate"]),
-                "phone_number": sanitize_input(data["phone_number"]),
-                "email": sanitize_input(data["email"].lower()),
-                "cake_donation": sanitize_input(data["cake_donation"]),
-                "help_organisation": sanitize_input(data["help_organisation"])
-            }
-
-            # Store in session
-            session["registration_data"] = sanitized_data
-            app.logger.info(f"Registration data stored in session for {sanitized_data['email']}")
-
-            # Convert persons list to JSON string before creating database entry
-            sanitized_data['persons'] = json.dumps(sanitized_data['persons'])
-
-            # Create database entry
-            registration = Registration(**sanitized_data)
-            db.session.add(registration)
-            if not safe_commit():
-                return jsonify({
-                    "success": False,
-                    "error": "Datenbankfehler. Bitte versuchen Sie es erneut."
+                    "error": "Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut."
                 }), 500
+        
+        else:
+            # Fallback für normale Form-Submissions (nicht AJAX)
+            form = RegistrationForm()
+            if not form.validate():
+                for field, errors in form.errors.items():
+                    for error in errors:
+                        flash(f"{field}: {error}", "danger")
+                return render_template("form.html", form=form)
 
-            return jsonify({
-                "success": True,
-                "redirect": url_for("confirmation")
-            })
-
-        except Exception as e:
-            app.logger.error(f"Registration error: {str(e)}")
-            return jsonify({
-                "success": False,
-                "error": "Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut."
-            }), 500
-
+    # GET Request - zeige Formular
     return render_template("form.html", form=RegistrationForm())
 
 @app.route("/confirmation")

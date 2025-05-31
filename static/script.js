@@ -281,6 +281,30 @@ function collectFormData() {
     };
 }
 
+function validatePersonData(personData) {
+    if (!personData.person_firstname || !personData.person_lastname || 
+        !personData.birthdate || !personData.club_membership) {
+        return false;
+    }
+    
+    // ✨ Altersvalidierung auch im Frontend
+    const birthDate = new Date(personData.birthdate);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+    }
+    
+    if (age < 6 || age > 11) {
+        addFlashMessage(`❌ Kind ist ${age} Jahre alt. Zeltlager ist für 1.-5. Klasse (6-11 Jahre).`, 'error');
+        return false;
+    }
+    
+    return true;
+}
+
 function collectPersonsData() {
     const persons = [];
     document.querySelectorAll(SELECTORS.PERSON_FORM).forEach(form => {
@@ -296,30 +320,6 @@ function collectPersonsData() {
         }
     });
     return persons;
-}
-
-def validatePersonData(personData) {
-    if (!personData.person_firstname || !personData.person_lastname || 
-        !personData.birthdate || !personData.club_membership) {
-        return false;
-    }
-    
-    // ✨ Altersvalidierung auch im Frontend
-    const birthDate = new Date(personData.birthdate);
-    const today = new Date();
-    const age = today.getFullYear() - birthDate.getFullYear();
-    const monthDiff = today.getMonth() - birthDate.getMonth();
-    
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-        age--;
-    }
-    
-    if (age < 6 || age > 11) {
-        addFlashMessage(`❌ Kind ist ${age} Jahre alt. Zeltlager ist für 1.-5. Klasse (6-11 Jahre).`, 'error');
-        return false;
-    }
-    
-    return true;
 }
 
 async function submitForm(formData) {
