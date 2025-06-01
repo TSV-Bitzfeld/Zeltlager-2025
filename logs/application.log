@@ -44,3 +44,4 @@
 2025-06-01 22:29:31,423 INFO: Admin dashboard stats: {'total_registrations': 0, 'total_children': 0, 'cake_friday_count': 0, 'cake_sunday_count': 0, 'help_thursday_count': 0, 'help_sunday_count': 0} [in C:\Users\pwwpp\Websites\anmeldung-zeltlager\app.py:1004]
 2025-06-01 22:29:33,647 INFO: Deleted all 0 registration entries [in C:\Users\pwwpp\Websites\anmeldung-zeltlager\app.py:1152]
 2025-06-01 22:29:33,657 INFO: Admin dashboard stats: {'total_registrations': 0, 'total_children': 0, 'cake_friday_count': 0, 'cake_sunday_count': 0, 'help_thursday_count': 0, 'help_sunday_count': 0} [in C:\Users\pwwpp\Websites\anmeldung-zeltlager\app.py:1004]
+2025-06-01 22:45:24,922 INFO: Application startup [in C:\Users\pwwpp\Websites\anmeldung-zeltlager\app.py:97]
