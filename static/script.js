@@ -71,6 +71,21 @@ function validateForm() {
                     if (selectedDate > currentDate) {
                         errorMessage = 'Geburtsdatum kann nicht in der Zukunft liegen';
                     }
+                    // ✅ NEUE ALTERSVALIDIERUNG FÜR KINDER
+                    else if (field.name.includes('birthdate_')) {
+                        const birthDate = new Date(field.value);
+                        const today = new Date();
+                        let age = today.getFullYear() - birthDate.getFullYear();
+                        const monthDiff = today.getMonth() - birthDate.getMonth();
+                        
+                        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                            age--;
+                        }
+                        
+                        if (age < 6 || age > 12) {
+                            errorMessage = `Kind ist ${age} Jahre alt. Zeltlager ist für 1.-5. Klasse (6-12 Jahre).`;
+                        }
+                    }
                     break;
                 case 'select-one':
                     if (field.value === '' || field.value === field.querySelector('option').value) {
@@ -301,8 +316,8 @@ function validatePersonData(personData) {
         age--;
     }
     
-    if (age < 6 || age > 11) {
-        addFlashMessage(`❌ Kind ist ${age} Jahre alt. Zeltlager ist für 1.-5. Klasse (6-11 Jahre).`, 'error');
+    if (age < 6 || age > 12) {
+        addFlashMessage(`❌ Kind ist ${age} Jahre alt. Zeltlager ist für 1.-5. Klasse (6-12 Jahre).`, 'error');
         return false;
     }
     
@@ -333,11 +348,9 @@ function collectPersonsData() {
         // Nur hinzufügen wenn alle Felder ausgefüllt sind
         if (personData.person_firstname && personData.person_lastname && 
             personData.birthdate && personData.club_membership) {
-            
-            if (validatePersonData(personData)) {
-                persons.push(personData);
-                console.log(`Added person ${index + 1} to list`);
-            }
+    
+            persons.push(personData); // ← Erstmal hinzufügen
+            console.log(`Added person ${index + 1} to list`);
         } else {
             console.log(`Person ${index + 1} incomplete, skipping`);
         }

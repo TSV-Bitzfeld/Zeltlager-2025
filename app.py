@@ -279,10 +279,10 @@ def safe_commit() -> bool:
         return False
 
 def validate_child_age(birth_date_str):
-    """Validiere dass Kinder zwischen 6-11 Jahre alt sind (1.-5. Klasse)"""
+    """Validiere dass Kinder zwischen 6-12 Jahre alt sind (1.-5. Klasse)"""
     age = calculate_age(birth_date_str)
-    if age and (age < 6 or age > 11):
-        return False, f"Kind ist {age} Jahre alt. Zeltlager ist für 1.-5. Klasse (6-11 Jahre)."
+    if age and (age < 6 or age > 12):
+        return False, f"Kind ist {age} Jahre alt. Zeltlager ist für 1.-5. Klasse (6-12 Jahre)."
     return True, None
 
 def validate_registration_data(data: Dict) -> Tuple[bool, Optional[str]]:
@@ -842,9 +842,9 @@ def admin():
                 
                 # Zähle Helfer
                 help_text = reg.help_organisation.lower()
-                if 'donnerstag' in help_text and 'aufbau' in help_text:
+                if 'aufbau' in help_text:
                     help_thursday_count += 1
-                elif 'sonntag' in help_text and 'abbau' in help_text:
+                elif 'abbau' in help_text:
                     help_sunday_count += 1
                 
                 reg_dict = {
