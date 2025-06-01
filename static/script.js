@@ -233,8 +233,12 @@ async function handleFormSubmit(event) {
     event.preventDefault();
     console.log('Form submitted');
     
+    // ✅ Fortschrittsanzeige starten
+    showProgressIndicator();
+    
     if (!validateForm()) {
         console.log('Form validation failed');
+        hideProgressIndicator(); // ✅ Bei Validierungsfehler ausblenden
         return;
     }
 
@@ -242,14 +246,17 @@ async function handleFormSubmit(event) {
         const formData = collectFormData();
         if (!formData) {
             console.log('Form data collection failed');
+            hideProgressIndicator(); // ✅ Bei Datensammlung-Fehler ausblenden
             return;
         }
 
         console.log('Submitting form data:', formData);
         const response = await submitForm(formData);
         handleSubmissionResponse(response);
+        // ✅ hideProgressIndicator() wird in handleSubmissionResponse aufgerufen
     } catch (error) {
         console.error('Submission error:', error);
+        hideProgressIndicator(); // ✅ Bei Netzwerk-Fehler ausblenden
         addFlashMessage(`❌ Fehler beim Absenden: ${error.message}`, 'error');
     }
 }
@@ -410,6 +417,13 @@ function handleSubmissionResponse(data) {
     console.log('Handling response:', data);
     
     if (data.success) {
+        // ✅ Bei Erfolg: Button zu "Erfolgreich!" ändern
+        const submitButton = document.querySelector('button[type="submit"]');
+        if (submitButton) {
+            submitButton.innerHTML = '✅ Erfolgreich! Weiterleitung...';
+            submitButton.style.backgroundColor = '#28a745'; // Grün
+        }
+        
         addFlashMessage('✅ Anmeldung erfolgreich! Sie werden weitergeleitet.', 'success');
         setTimeout(() => {
             const redirectUrl = data.redirect || '/confirmation';
@@ -417,6 +431,42 @@ function handleSubmissionResponse(data) {
             window.location.href = redirectUrl;
         }, 2000);
     } else {
+        // ✅ Bei Fehler: Fortschrittsanzeige ausblenden
+        hideProgressIndicator();
         addFlashMessage('❌ Fehler bei der Anmeldung: ' + (data.error || 'Unbekannter Fehler'), 'error');
+    }
+}
+
+// ✅ Fortschrittsanzeige Funktionen
+function showProgressIndicator() {
+    const submitButton = document.querySelector('button[type="submit"]');
+    if (submitButton) {
+        // Original-Text speichern falls noch nicht gespeichert
+        if (!submitButton.dataset.originalText) {
+            submitButton.dataset.originalText = submitButton.innerHTML;
+        }
+        
+        // Button Status ändern
+        submitButton.innerHTML = '⏳ Anmeldung wird verarbeitet...';
+        submitButton.disabled = true;
+        submitButton.style.cursor = 'not-allowed';
+        submitButton.style.opacity = '0.7';
+        
+        console.log('Progress indicator shown');
+    }
+}
+
+function hideProgressIndicator() {
+    const submitButton = document.querySelector('button[type="submit"]');
+    if (submitButton) {
+        // Original-Text wiederherstellen
+        const originalText = submitButton.dataset.originalText || 'Anmeldung absenden';
+        
+        submitButton.innerHTML = originalText;
+        submitButton.disabled = false;
+        submitButton.style.cursor = 'pointer';
+        submitButton.style.opacity = '1';
+        
+        console.log('Progress indicator hidden');
     }
 }
