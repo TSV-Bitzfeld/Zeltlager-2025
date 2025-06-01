@@ -12,6 +12,7 @@ from functools import wraps
 from hmac import compare_digest
 from dotenv import load_dotenv
 from secrets import token_hex
+from email.mime.application import MIMEApplication
 
 # Load environment variables before creating the Flask app
 load_dotenv()
@@ -323,8 +324,8 @@ def send_confirmation_email(app, entry_id):
                 app.logger.error(f"Registration entry {entry_id} not found")
                 return False
 
-            # E-Mail konfigurieren
-            msg = MIMEMultipart('alternative')
+            # ✅ KORREKTE E-Mail-Struktur: 'mixed' für Anhänge
+            msg = MIMEMultipart('mixed')
             msg["From"] = app.config['SMTP_USER']
             msg["To"] = entry.email
             msg["Subject"] = "Ihre Anmeldung zum Zeltlager 2025"
@@ -339,12 +340,34 @@ def send_confirmation_email(app, entry_id):
             email_body_text = create_confirmation_email_text(entry, persons_data)
             email_body_html = create_confirmation_email_html(entry, persons_data)
 
-            # Text- und HTML-Versionen hinzufügen
+            # ✅ Erstelle eine 'alternative' Gruppe für Text + HTML
+            body_container = MIMEMultipart('alternative')
+            
+            # Text- und HTML-Versionen zur alternativen Gruppe hinzufügen
             part1 = MIMEText(email_body_text, 'plain', 'utf-8')
             part2 = MIMEText(email_body_html, 'html', 'utf-8')
             
-            msg.attach(part1)
-            msg.attach(part2)
+            body_container.attach(part1)
+            body_container.attach(part2)
+            
+            # ✅ Die alternative Gruppe zur Haupt-Nachricht hinzufügen
+            msg.attach(body_container)
+
+            # ✅ PDF als Anhang hinzufügen
+            pdf_path = os.path.join(app.static_folder, 'forms', 'gesundheitsbogen-und-einverstaendniserklaerung.pdf')
+            
+            if os.path.exists(pdf_path):
+                with open(pdf_path, 'rb') as pdf_file:
+                    pdf_attachment = MIMEApplication(pdf_file.read(), _subtype='pdf')
+                    pdf_attachment.add_header(
+                        'Content-Disposition', 
+                        'attachment', 
+                        filename='Gesundheitsbogen_Einverstaendniserklaerung_Zeltlager2025.pdf'
+                    )
+                    msg.attach(pdf_attachment)
+                    app.logger.info("PDF attachment added successfully")
+            else:
+                app.logger.warning(f"PDF file not found at: {pdf_path}")
 
             # E-Mail versenden
             with smtplib.SMTP(app.config['SMTP_SERVER'], app.config['SMTP_PORT']) as server:
@@ -359,118 +382,47 @@ def send_confirmation_email(app, entry_id):
             app.logger.error(f"Failed to send confirmation email for entry {entry_id}: {str(e)}")
             return False
 
-def create_confirmation_email_text(entry, persons_data):
-    """Create text version of confirmation email"""
-    
-    # Kinder-Details formatieren
-    children_details = []
-    for i, person in enumerate(persons_data, 1):
-        children_details.append(
-            f"  Kind {i}: {person.get('person_firstname', '')} {person.get('person_lastname', '')}\n"
-            f"          Geburtsdatum: {person.get('birthdate', '')}\n"
-            f"          Verein: {person.get('club_membership', '')}"
-        )
-    
-    children_text = "\n".join(children_details)
-    child_count = len(persons_data)
-    
-    # Zahlungsbetrag berechnen
-    total_amount = child_count * 50
-    
-    return f"""Liebe/r {entry.contact_firstname} {entry.contact_lastname},
-
-vielen Dank für Ihre Anmeldung zum Zeltlager 2025 "Farm Fieber"!
-
-═══════════════════════════════════════════════════
-📋 IHRE ANMELDEDATEN IM ÜBERBLICK
-═══════════════════════════════════════════════════
-
-👤 KONTAKTPERSON:
-   {entry.contact_firstname} {entry.contact_lastname}
-   Geburtsdatum: {entry.contact_birthdate}
-   E-Mail: {entry.email}
-   Telefon: {entry.phone_number}
-
-👶 ANGEMELDETE KINDER ({child_count} {'Kind' if child_count == 1 else 'Kinder'}):
-{children_text}
-
-🍰 KUCHENSPENDE:
-   {entry.cake_donation}
-
-🔨 AUF-/ABBAU:
-   {entry.help_organisation}
-
-💰 ZAHLUNGSINFORMATIONEN:
-   Betrag: {total_amount},00 € ({child_count} {'Kind' if child_count == 1 else 'Kinder'} x 50,00 €)
-   Zahlungsfrist: 30. Juni 2025
-   
-   Bankdaten:
-   Empfänger: {app.config.get('RECIPIENT_NAME', 'TSV Bitzfeld 1922 e.V.')}
-   IBAN: {app.config.get('BANK_IBAN', 'DE89 6225 0030 0005 0447 68')}
-   BIC: {app.config.get('BANK_BIC', 'SOLADES1HLB')}
-   Verwendungszweck: Zeltlager-{entry.contact_firstname} {entry.contact_lastname}
-
-═══════════════════════════════════════════════════
-📝 WICHTIGE NÄCHSTE SCHRITTE
-═══════════════════════════════════════════════════
-
-1️⃣ ZAHLUNG bis 30. Juni 2025 überweisen
-
-2️⃣ FORMULARE herunterladen und ausfüllen:
-   → Gesundheitsbogen
-   → Einverständniserklärung
-   
-   Download unter: https://[IHRE-DOMAIN]/static/forms/gesundheitsbogen-und-einverstaendniserklaerung.pdf
-   
-   ⚠️ Wichtig: Bitte für {'jedes Kind ein separates Formular' if child_count > 1 else 'das Kind ein Formular'} ausfüllen!
-
-3️⃣ FORMULARE mitbringen zum Zeltlager-Start:
-   📅 Freitag, 18. Juli 2025 um 16:00 Uhr
-   📍 Sportplatz in Schwabbach
-
-═══════════════════════════════════════════════════
-📅 ZELTLAGER-PROGRAMM "FARM FIEBER"
-═══════════════════════════════════════════════════
-
-🕐 Freitag, 18. Juli 2025 ab 16:00 Uhr
-   → Start des Zeltlagers
-   → Bitte Formulare mitbringen!
-
-🕐 Samstag, 19. Juli 2025
-   → Tagesausflug nach Braunsbach (Bauernhof)
-
-🕐 Sonntag, 20. Juli 2025 ab 14:00 Uhr
-   → Kaffee und Kuchen für Eltern
-   → Fußballspiel "Klein gegen Groß"
-   → Ende des Zeltlagers
-
-═══════════════════════════════════════════════════
-❓ FRAGEN ODER PROBLEME?
-═══════════════════════════════════════════════════
-
-Kontaktieren Sie uns gerne:
-📧 anmeldung.tsvbitzfeld1922@gmail.com
-📞 Lena Weihbrecht: 0173/8909378
-
-═══════════════════════════════════════════════════
-
-Wir freuen uns riesig auf drei tolle Tage mit {'Ihrem Kind' if child_count == 1 else 'Ihren Kindern'} beim Zeltlager 2025! 🏕️🚜
-
-Mit freundlichen Grüßen
-Ihr Zeltlager-Team
-TSV Bitzfeld 1922 e.V. & TSV Schwabbach 1947 e.V.
-
-═══════════════════════════════════════════════════
-Diese E-Mail wurde automatisch generiert.
-Anmeldezeitpunkt: {entry.created_at.astimezone(pytz.timezone("Europe/Berlin")).strftime("%d.%m.%Y um %H:%M Uhr")}
-"""
-
 def create_confirmation_email_html(entry, persons_data):
     """Create HTML version of confirmation email"""
+    
+    def format_date(date_string):
+        """Convert YYYY-MM-DD to DD.MM.YYYY format"""
+        if not date_string:
+            return ""
+        try:
+            # Handle both YYYY-MM-DD and DD.MM.YYYY formats
+            if "-" in date_string:
+                parts = date_string.split("-")
+                if len(parts) == 3:
+                    return f"{parts[2]}.{parts[1]}.{parts[0]}"
+            return date_string  # Return as-is if already in correct format or unknown
+        except:
+            return date_string
+    
+    def format_cake_donation(cake_text):
+        """Shorten cake donation text"""
+        if not cake_text:
+            return ""
+        if "freitag" in cake_text.lower():
+            return "Rührkuchen für Freitag"
+        elif "sonntag" in cake_text.lower():
+            return "Kuchen für Sonntag"
+        return cake_text
+    
+    def format_help_organisation(help_text):
+        """Shorten help organisation text"""
+        if not help_text:
+            return ""
+        if "aufbau" in help_text.lower():
+            return "Aufbau"
+        elif "abbau" in help_text.lower():
+            return "Abbau"
+        return help_text
     
     # Kinder-Details formatieren
     children_html = ""
     for i, person in enumerate(persons_data, 1):
+        formatted_birthdate = format_date(person.get('birthdate', ''))
         children_html += f"""
         <tr style="border-bottom: 1px solid #eee;">
             <td style="padding: 8px; font-weight: bold;">Kind {i}:</td>
@@ -478,7 +430,7 @@ def create_confirmation_email_html(entry, persons_data):
         </tr>
         <tr>
             <td style="padding: 8px; padding-left: 20px; color: #666;">Geburtsdatum:</td>
-            <td style="padding: 8px; color: #666;">{person.get('birthdate', '')}</td>
+            <td style="padding: 8px; color: #666;">{formatted_birthdate}</td>
         </tr>
         <tr>
             <td style="padding: 8px; padding-left: 20px; color: #666;">Verein:</td>
@@ -488,6 +440,13 @@ def create_confirmation_email_html(entry, persons_data):
     
     child_count = len(persons_data)
     total_amount = child_count * 50
+    
+    # Format contact birthdate
+    formatted_contact_birthdate = format_date(entry.contact_birthdate)
+    
+    # Format cake donation and help organisation
+    formatted_cake_donation = format_cake_donation(entry.cake_donation)
+    formatted_help_organisation = format_help_organisation(entry.help_organisation)
     
     return f"""
     <!DOCTYPE html>
@@ -509,7 +468,7 @@ def create_confirmation_email_html(entry, persons_data):
             <h3 style="color: #34495e; border-bottom: 2px solid #3498db; padding-bottom: 5px;">👤 Kontaktperson</h3>
             <table style="width: 100%; border-collapse: collapse;">
                 <tr><td style="padding: 5px; font-weight: bold;">Name:</td><td style="padding: 5px;">{entry.contact_firstname} {entry.contact_lastname}</td></tr>
-                <tr><td style="padding: 5px; font-weight: bold;">Geburtsdatum:</td><td style="padding: 5px;">{entry.contact_birthdate}</td></tr>
+                <tr><td style="padding: 5px; font-weight: bold;">Geburtsdatum:</td><td style="padding: 5px;">{formatted_contact_birthdate}</td></tr>
                 <tr><td style="padding: 5px; font-weight: bold;">E-Mail:</td><td style="padding: 5px;">{entry.email}</td></tr>
                 <tr><td style="padding: 5px; font-weight: bold;">Telefon:</td><td style="padding: 5px;">{entry.phone_number}</td></tr>
             </table>
@@ -521,8 +480,8 @@ def create_confirmation_email_html(entry, persons_data):
 
             <h3 style="color: #34495e; border-bottom: 2px solid #3498db; padding-bottom: 5px; margin-top: 25px;">🍰 Weitere Angaben</h3>
             <table style="width: 100%; border-collapse: collapse;">
-                <tr><td style="padding: 5px; font-weight: bold;">Kuchenspende:</td><td style="padding: 5px;">{entry.cake_donation}</td></tr>
-                <tr><td style="padding: 5px; font-weight: bold;">Auf-/Abbau:</td><td style="padding: 5px;">{entry.help_organisation}</td></tr>
+                <tr><td style="padding: 5px; font-weight: bold;">Kuchenspende:</td><td style="padding: 5px;">{formatted_cake_donation}</td></tr>
+                <tr><td style="padding: 5px; font-weight: bold;">Auf-/Abbau:</td><td style="padding: 5px;">{formatted_help_organisation}</td></tr>
             </table>
         </div>
 
@@ -547,28 +506,42 @@ def create_confirmation_email_html(entry, persons_data):
             <h2 style="color: #155724; margin-top: 0;">📝 Wichtige nächste Schritte</h2>
             <ol style="color: #155724; margin: 10px 0;">
                 <li style="margin: 10px 0;"><strong>Zahlung überweisen</strong> bis 30. Juni 2025</li>
-                <li style="margin: 10px 0;"><strong>Formulare herunterladen, ausdrucken und ausfüllen</strong>
+                <li style="margin: 10px 0;"><strong>📎 Formulare ausdrucken und ausfüllen</strong><br>
+                    <em style="color: #155724; font-size: 14px;">Die Formulare (Gesundheitsbogen & Einverständniserklärung) finden Sie im Anhang dieser E-Mail!</em><br>
+                    <small style="color: #666;">⚠️ Wichtig: Bitte für {'jedes Kind ein separates Formular' if child_count > 1 else 'das Kind ein Formular'} ausfüllen!</small>
                 </li>
                 <li style="margin: 10px 0;"><strong>Formulare mitbringen</strong> zum Zeltlager-Start am <strong>Freitag, 18. Juli 2025 um 16:00 Uhr</strong></li>
             </ol>
         </div>
 
         <div style="background: #e3f2fd; border: 1px solid #bbdefb; border-radius: 8px; padding: 20px; margin: 20px 0;">
-            <h2 style="color: #1565c0; margin-top: 0;">📅 Zeltlager-Programm Farm Fieber</h2>
-            <table style="width: 100%; border-collapse: collapse;">
-                <tr>
-                    <td style="padding: 10px; font-weight: bold; color: #1565c0;">🕐 Freitag, 18. Juli 2025</td>
-                    <td style="padding: 10px;">ab 16:00 Uhr - Start des Zeltlagers<br><small>📍 Sportplatz in Schwabbach</small></td>
-                </tr>
-                <tr>
-                    <td style="padding: 10px; font-weight: bold; color: #1565c0;">🕐 Samstag, 19. Juli 2025</td>
-                    <td style="padding: 10px;">Tagesausflug nach Braunsbach (Bauernhof)</td>
-                </tr>
-                <tr>
-                    <td style="padding: 10px; font-weight: bold; color: #1565c0;">🕐 Sonntag, 20. Juli 2025</td>
-                    <td style="padding: 10px;">ab 14:00 Uhr - Kaffee und Kuchen für Eltern<br>Fußballspiel "Klein gegen Groß"</td>
-                </tr>
-            </table>
+            <h2 style="color: #1565c0; margin-top: 0;">🎒 Packliste für das Zeltlager</h2>
+            
+            <h3 style="color: #1565c0; margin-top: 20px; margin-bottom: 10px;">✅ Ausrüstung</h3>
+            <ul style="color: #1565c0; margin: 10px 0; padding-left: 20px;">
+                <li>Schlafsack</li>
+                <li>Isomatte / Luftmatratze</li>
+                <li>Wolldecke</li>
+                <li>Waschzeug</li>
+                <li>Handtücher</li>
+                <li>Badesachen (für evtl. Wasserspiele)</li>
+                <li>Taschenlampe</li>
+                <li>Kleiner Rucksack, Vesperbox, Trinkflasche</li>
+                <li>Kleider und Schuhwerk je nach Wetterlage</li>
+                <li>Autositz</li>
+            </ul>
+
+            <h3 style="color: #1565c0; margin-top: 20px; margin-bottom: 10px;">❌ Nicht erwünscht</h3>
+            <ul style="color: #1565c0; margin: 10px 0; padding-left: 20px;">
+                <li>Süßigkeiten aller Art (Ameisen im Zelt)</li>
+                <li>Elektronische Spielgeräte</li>
+            </ul>
+
+            <h3 style="color: #1565c0; margin-top: 20px; margin-bottom: 10px;">👨‍👩‍👧‍👦 Für die Eltern am Sonntag</h3>
+            <ul style="color: #1565c0; margin: 10px 0; padding-left: 20px;">
+                <li>Bitte eigenes Geschirr mitbringen</li>
+                <li>Turnschuhe für das Fußballspiel</li>
+            </ul>
         </div>
 
         <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 15px; margin: 20px 0;">
@@ -593,6 +566,158 @@ def create_confirmation_email_html(entry, persons_data):
     </body>
     </html>
     """
+
+def create_confirmation_email_text(entry, persons_data):
+    """Create text version of confirmation email"""
+    
+    def format_date(date_string):
+        """Convert YYYY-MM-DD to DD.MM.YYYY format"""
+        if not date_string:
+            return ""
+        try:
+            if "-" in date_string:
+                parts = date_string.split("-")
+                if len(parts) == 3:
+                    return f"{parts[2]}.{parts[1]}.{parts[0]}"
+            return date_string
+        except:
+            return date_string
+    
+    def format_cake_donation(cake_text):
+        """Shorten cake donation text"""
+        if not cake_text:
+            return ""
+        if "freitag" in cake_text.lower():
+            return "Rührkuchen für Freitag"
+        elif "sonntag" in cake_text.lower():
+            return "Kuchen für Sonntag"
+        return cake_text
+    
+    def format_help_organisation(help_text):
+        """Shorten help organisation text"""
+        if not help_text:
+            return ""
+        if "aufbau" in help_text.lower():
+            return "Aufbau"
+        elif "abbau" in help_text.lower():
+            return "Abbau"
+        return help_text
+    
+    # Kinder-Details formatieren
+    children_details = []
+    for i, person in enumerate(persons_data, 1):
+        formatted_birthdate = format_date(person.get('birthdate', ''))
+        children_details.append(
+            f"  Kind {i}: {person.get('person_firstname', '')} {person.get('person_lastname', '')}\n"
+            f"          Geburtsdatum: {formatted_birthdate}\n"
+            f"          Verein: {person.get('club_membership', '')}"
+        )
+    
+    children_text = "\n".join(children_details)
+    child_count = len(persons_data)
+    
+    # Zahlungsbetrag berechnen
+    total_amount = child_count * 50
+    
+    # Format contact birthdate
+    formatted_contact_birthdate = format_date(entry.contact_birthdate)
+    
+    # Format cake donation and help organisation
+    formatted_cake_donation = format_cake_donation(entry.cake_donation)
+    formatted_help_organisation = format_help_organisation(entry.help_organisation)
+    
+    return f"""Liebe/r {entry.contact_firstname} {entry.contact_lastname},
+
+vielen Dank für Ihre Anmeldung zum Zeltlager 2025 "Farm Fieber"!
+
+═══════════════════════════════════════════════════
+📋 IHRE ANMELDEDATEN IM ÜBERBLICK
+═══════════════════════════════════════════════════
+
+👤 KONTAKTPERSON:
+   {entry.contact_firstname} {entry.contact_lastname}
+   Geburtsdatum: {formatted_contact_birthdate}
+   E-Mail: {entry.email}
+   Telefon: {entry.phone_number}
+
+👶 ANGEMELDETE KINDER ({child_count} {'Kind' if child_count == 1 else 'Kinder'}):
+{children_text}
+
+🍰 KUCHENSPENDE:
+   {formatted_cake_donation}
+
+🔨 AUF-/ABBAU:
+   {formatted_help_organisation}
+
+💰 ZAHLUNGSINFORMATIONEN:
+   Betrag: {total_amount},00 € ({child_count} {'Kind' if child_count == 1 else 'Kinder'} x 50,00 €)
+   Zahlungsfrist: 30. Juni 2025
+   
+   Bankdaten:
+   Empfänger: {app.config.get('RECIPIENT_NAME', 'TSV Bitzfeld 1922 e.V.')}
+   IBAN: {app.config.get('BANK_IBAN', 'DE89 6225 0030 0005 0447 68')}
+   BIC: {app.config.get('BANK_BIC', 'SOLADES1HLB')}
+   Verwendungszweck: Zeltlager-{entry.contact_firstname} {entry.contact_lastname}
+
+═══════════════════════════════════════════════════
+📝 WICHTIGE NÄCHSTE SCHRITTE
+═══════════════════════════════════════════════════
+
+1️⃣ ZAHLUNG bis 30. Juni 2025 überweisen
+
+2️⃣ FORMULARE ausdrucken und ausfüllen:
+   📎 Die Formulare (Gesundheitsbogen & Einverständniserklärung) finden Sie im Anhang!
+   
+   ⚠️ Wichtig: Bitte für {'jedes Kind ein separates Formular' if child_count > 1 else 'das Kind ein Formular'} ausfüllen!
+
+3️⃣ FORMULARE mitbringen zum Zeltlager-Start:
+   📅 Freitag, 18. Juli 2025 um 16:00 Uhr
+   📍 Sportplatz in Schwabbach
+
+═══════════════════════════════════════════════════
+🎒 PACKLISTE FÜR DAS ZELTLAGER
+═══════════════════════════════════════════════════
+
+✅ AUSRÜSTUNG:
+• Schlafsack
+• Isomatte / Luftmatratze
+• Wolldecke
+• Waschzeug
+• Handtücher
+• Badesachen (für evtl. Wasserspiele)
+• Taschenlampe
+• Kleiner Rucksack, Vesperbox, Trinkflasche
+• Kleider und Schuhwerk je nach Wetterlage
+• Autositz
+
+❌ NICHT ERWÜNSCHT:
+• Süßigkeiten aller Art (Ameisen im Zelt)
+• Elektronische Spielgeräte
+
+👨‍👩‍👧‍👦 FÜR DIE ELTERN AM SONNTAG:
+• Bitte eigenes Geschirr mitbringen
+• Turnschuhe für das Fußballspiel
+
+═══════════════════════════════════════════════════
+❓ FRAGEN ODER PROBLEME?
+═══════════════════════════════════════════════════
+
+Kontaktieren Sie uns gerne:
+📧 anmeldung.tsvbitzfeld1922@gmail.com
+📞 Lena Weihbrecht: 0173/8909378
+
+═══════════════════════════════════════════════════
+
+Wir freuen uns riesig auf drei tolle Tage mit {'Ihrem Kind' if child_count == 1 else 'Ihren Kindern'} beim Zeltlager 2025! 🏕️🚜
+
+Mit freundlichen Grüßen
+Ihr Zeltlager-Team
+TSV Bitzfeld 1922 e.V. & TSV Schwabbach 1947 e.V.
+
+═══════════════════════════════════════════════════
+Diese E-Mail wurde automatisch generiert.
+Anmeldezeitpunkt: {entry.created_at.astimezone(pytz.timezone("Europe/Berlin")).strftime("%d.%m.%Y um %H:%M Uhr")}
+"""
 
 def sanitize_input(value):
     """Sanitize user input to prevent XSS and other injection attacks"""
