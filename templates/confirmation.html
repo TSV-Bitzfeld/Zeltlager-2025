@@ -37,6 +37,11 @@
             <p><small><strong>Hinweis:</strong> Bitte füllen Sie die Formulare für jedes angemeldete Kind separat aus.</small></p>
         {% endif %}
 
+        <a href="{{ url_for('static', filename='forms/packliste.pdf') }}" 
+           class="button" 
+           download="Packliste_Zeltlager2025.pdf">Packliste herunterladen
+        </a>
+
         <!-- Bankdaten direkt angezeigt -->
         <div class="bank-details-container">
             <p><strong>Empfänger:</strong> {{ payment_info.recipient }}</p>
