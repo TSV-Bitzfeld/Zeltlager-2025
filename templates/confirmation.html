@@ -45,6 +45,7 @@
         <!-- Bankdaten direkt angezeigt -->
         <div class="bank-details-container">
             <p><strong>Empfänger:</strong> {{ payment_info.recipient }}</p>
+            <p><strong>Bank:</strong> {{ payment_info.bank_name }}</p>
             <p><strong>IBAN:</strong> {{ payment_info.iban }}</p>
             <p><strong>BIC:</strong> {{ payment_info.bic }}</p>
             <p><strong>Verwendungszweck:</strong> Zeltlager-{{ data.contact_firstname }} {{ data.contact_lastname }}</p>

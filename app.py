@@ -76,6 +76,11 @@ limiter = Limiter(
     storage_uri="memory://"
 )
 
+app.config['SMTP_SERVER'] = 'smtp.gmail.com'
+app.config['SMTP_PORT'] = 587
+app.config['SMTP_USER'] = os.getenv('SMTP_USER')
+app.config['SMTP_PASS'] = os.getenv('SMTP_PASS')
+
 # Configure logging
 def setup_logging():
     """Configure application logging"""
@@ -887,11 +892,10 @@ def confirmation():
         "confirmation.html", 
         data=data,
         payment_info={
-            'paypal_link': app.config.get('PAYPAL_LINK', ''),
-            'bank_name': app.config.get('BANK_NAME', ''),
-            'recipient': app.config.get('RECIPIENT_NAME', ''),
-            'iban': app.config.get('BANK_IBAN', ''),
-            'bic': app.config.get('BANK_BIC', '')
+            'bank_name': app.config.get('BANK_NAME', 'C24 Bank GmbH'),
+            'recipient': app.config.get('RECIPIENT_NAME', 'Lena Weihbrecht'),
+            'iban': app.config.get('BANK_IBAN', 'DE47 5002 4024 1140 4964 31'),
+            'bic': app.config.get('BANK_BIC', 'DEFFDEFFXXX')
         }
     )
 
